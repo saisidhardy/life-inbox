@@ -1,0 +1,24 @@
+databases: []
+
+services:
+  - type: web
+    name: life-inbox
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -m alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: DATABASE_URL
+        value: sqlite:///data/life_inbox.db
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: life-inbox-data
+      mountPath: /app/data
+      sizeGB: 1
