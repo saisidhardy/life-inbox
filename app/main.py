@@ -1,10 +1,13 @@
+import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from app.database import (
     add_item_to_db,
@@ -47,9 +50,131 @@ app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 init_db()
 
 
+class BatchImportPayload(BaseModel):
+    notes: List[str] = Field(..., min_length=1)
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/stats")
+def get_stats():
+    try:
+        items = list_items_from_db(limit=1000)
+        open_tasks = list_tasks_from_db("open")
+        completed_tasks = list_tasks_from_db("completed")
+        dismissed_tasks = list_tasks_from_db("dismissed")
+        latest = get_latest_successful_analysis()
+
+        tag_counts = {}
+        for item in items:
+            text = item.get("raw_text") or ""
+            for word in text.split():
+                if word.startswith("#") and len(word) > 1:
+                    tag = word.lstrip("#").strip(".,!?;:()[]{}\"'").lower()
+                    if tag:
+                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+        top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        return {
+            "total_items": len(items),
+            "open_tasks": len(open_tasks),
+            "completed_tasks": len(completed_tasks),
+            "dismissed_tasks": len(dismissed_tasks),
+            "analysis_mode": latest.get("mode") if latest else None,
+            "last_analysis_at": latest.get("generated_at") if latest else None,
+            "top_tags": [{"tag": t[0], "count": t[1]} for t in top_tags],
+        }
+    except Exception as exc:
+        logger.exception("Failed to compute stats")
+        raise HTTPException(
+            status_code=500, detail="Unable to compute stats"
+        ) from exc
+
+
+@app.get("/api/export")
+def export_inbox(format: str = Query("markdown", pattern="^(markdown|json)$")):
+    try:
+        items = list_items_from_db(limit=1000)
+        tasks = list_tasks_from_db("all")
+        latest = get_latest_successful_analysis()
+
+        if format == "json":
+            payload = {
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "items": items,
+                "tasks": tasks,
+                "latest_analysis": latest,
+            }
+            return Response(
+                content=json.dumps(payload, indent=2, ensure_ascii=False),
+                media_type="application/json",
+                headers={
+                    "Content-Disposition": "attachment; filename=life-inbox-export.json"
+                },
+            )
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        lines = [
+            "# Life Inbox Export",
+            f"*Generated on {now}*",
+            "",
+            f"## Notes ({len(items)})",
+            "",
+        ]
+        for it in items:
+            title = it.get("title") or f"Note #{it['id']}"
+            created = it.get("created_at") or "Unknown"
+            raw = it.get("raw_text") or ""
+            lines.append(f"### {title}")
+            lines.append(f"> ID: `{it['id']}` · Created: `{created}`")
+            lines.append("")
+            lines.append(raw)
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+        lines.extend([
+            f"## Action Items & Tasks ({len(tasks)})",
+            "",
+        ])
+        for t in tasks:
+            check = "x" if t["status"] == "completed" else " "
+            when = f" · *{t['timing_text']}*" if t.get("timing_text") else ""
+            lines.append(f"- [{check}] **{t['text']}** `[{t['priority']}]`{when}")
+
+        content = "\n".join(lines)
+        return Response(
+            content=content,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": "attachment; filename=life-inbox-export.md"
+            },
+        )
+    except Exception as exc:
+        logger.exception("Failed to export inbox")
+        raise HTTPException(
+            status_code=500, detail="Unable to export data"
+        ) from exc
+
+
+@app.post("/api/import")
+def import_inbox(payload: BatchImportPayload):
+    try:
+        imported = []
+        for text in payload.notes:
+            cleaned = text.strip()
+            if cleaned:
+                imported.append(add_item_to_db(cleaned))
+        return {"imported_count": len(imported), "items": imported}
+    except Exception as exc:
+        logger.exception("Failed to import notes")
+        raise HTTPException(
+            status_code=500, detail="Unable to import notes"
+        ) from exc
 
 
 @app.post("/api/items", response_model=InboxItem)

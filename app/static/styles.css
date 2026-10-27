@@ -1694,3 +1694,72 @@ label {
     border: 1px solid #ccc;
   }
 }
+
+
+/* ============================================================
+   INTERACTIVE NOTES & TEMPLATES
+   ============================================================ */
+
+.btn-template {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-template:hover {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.note-tag {
+  display: inline-block;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin: 0 2px;
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: opacity var(--transition-fast);
+}
+.note-tag:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.note-checkbox {
+  cursor: pointer;
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+.checked-item {
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.note-link {
+  color: var(--accent);
+  text-decoration: underline;
+  word-break: break-all;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.note-link:hover {
+  color: var(--accent-hover);
+}
+
+.note-inline-code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: monospace;
+}

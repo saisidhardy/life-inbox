@@ -1002,3 +1002,41 @@ def test_openai_failure_fallback_omits_technical_details(monkeypatch):
     assert result["mode"] == "fallback_after_api_error"
     assert "error" not in result
     assert "super-secret" not in repr(result)
+
+
+def test_stats_and_tag_extraction(client):
+    client.post("/api/items", json={"raw_text": "Meeting with #team about #roadmap tomorrow"})
+    client.post("/api/items", json={"raw_text": "Buy groceries for #team event"})
+    response = client.get("/api/stats")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_items"] == 2
+    assert "top_tags" in data
+    tags = {t["tag"]: t["count"] for t in data["top_tags"]}
+    assert tags.get("team") == 2
+    assert tags.get("roadmap") == 1
+
+
+def test_export_markdown_and_json(client):
+    client.post("/api/items", json={"raw_text": "Important note #urgent"})
+    # Test JSON export
+    res_json = client.get("/api/export?format=json")
+    assert res_json.status_code == 200
+    assert "application/json" in res_json.headers["content-type"]
+    assert len(res_json.json()["items"]) == 1
+
+    # Test Markdown export
+    res_md = client.get("/api/export?format=markdown")
+    assert res_md.status_code == 200
+    assert "text/markdown" in res_md.headers["content-type"]
+    assert "Important note #urgent" in res_md.text
+
+
+def test_batch_import(client):
+    payload = {"notes": ["First imported note", "Second imported note #ideas"]}
+    response = client.post("/api/import", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["imported_count"] == 2
+    items = client.get("/api/items").json()
+    assert len(items) == 2

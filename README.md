@@ -1,6 +1,7 @@
 # Life Inbox 📥
 
 [![CI/CD Pipeline](https://github.com/saisidhardy/life-inbox/actions/workflows/ci.yml/badge.svg)](https://github.com/saisidhardy/life-inbox/actions/workflows/ci.yml)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Online%20Now-success.svg)](https://tech-senate-mainstream-flowers.trycloudflare.com)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57.svg)](https://www.sqlite.org/)
@@ -9,21 +10,34 @@
 
 > **Capture first. Organize the whole inbox with AI when you are ready.**
 
-Life Inbox is an AI-powered personal dashboard and productivity system. It lets you capture messy, unstructured notes, reminders, thoughts, and ideas at the speed of thought—then uses OpenAI (or an offline deterministic organizer) to turn your stream of notes into structured categories, actionable tasks, and a clear priority dashboard.
+🌐 **Live Demo Hosted Online:** [https://tech-senate-mainstream-flowers.trycloudflare.com](https://tech-senate-mainstream-flowers.trycloudflare.com)
+
+Life Inbox is an AI-powered personal dashboard and second-brain productivity system. It lets you capture messy, unstructured notes, reminders, thoughts, checklists, and ideas at the speed of thought—then uses OpenAI (or an offline deterministic organizer) to turn your stream of notes into structured categories, actionable tasks, and a clear priority dashboard.
 
 ---
 
-## ✨ Features
+## ✨ Power Features
 
-- **⚡ Instant Quick Capture**: Jot down thoughts, tasks, and ideas with a single click or keyboard shortcut (`Ctrl+Enter`).
+- **⚡ Instant Quick Capture**: Jot down thoughts with `Ctrl+Enter` or tap structured quick-capture templates:
+  - 📞 **Meeting Note** (`#meeting with [Name]`)
+  - 💡 **Idea** (`💡 #idea [Title]`)
+  - 🛒 **Checklist** (`#checklist To Do / Buy`)
+  - 📚 **Resource / Learning** (`📚 #learning`)
+- **☑️ Interactive In-Note Checklists**: Write `- [ ] task` or `- [x] done`. Checkboxes are rendered as live interactive toggles; clicking a checkbox updates the note in the database in real-time.
+- **🏷️ Smart Auto-Tagging (#tags)**: Any `#tag` written in a note becomes a clickable badge pill. Click any tag to instantly filter your entire inbox. Top tags are aggregated live in a cloud on your Dashboard.
+- **🔗 Clickable URLs & Code Blocks**: Web links are automatically recognized as external links, and backticked text is rendered with monospaced code styling.
+- **💾 Data Ownership (Export & Import)**:
+  - **Export to Markdown**: Download all notes and action items as a clean `.md` document ready for **Obsidian**, **Notion**, or **Apple Notes**.
+  - **Export to JSON**: Complete database backup.
+  - **Batch Import**: Paste multiple notes separated by `---` to bulk import in seconds.
+- **📋 One-Click Task Copy**: Click "Copy as Markdown" to instantly copy all filtered tasks into your clipboard formatted for Slack, WhatsApp, or daily standups.
 - **🤖 Intelligent Inbox Organization**: Organizes all saved notes together using OpenAI into structured buckets, prioritized action items, and deduplicated to-dos.
 - **🛡️ Offline Fallback Mode**: Works 100% locally even without an OpenAI API key using a deterministic rule-based organization engine.
 - **✅ Persistent Task Management**: Extracted action items become trackable tasks with full lifecycle support (`open`, `completed`, `dismissed`, `reopened`). Tasks preserve source links back to original notes and prevent duplication across re-analyses.
-- **🔍 Fast Search & Filter**: Real-time multi-attribute search across raw text, categories, priority levels, and processing statuses with URL state synchronization.
 - **🎨 Modern Responsive UI**:
   - Dark / Light mode toggle with persistent local storage
   - Desktop sidebar + mobile-optimized bottom navigation
-  - Dashboard analytics overview (total notes, pending tasks, analysis timestamps)
+  - Dashboard analytics overview (total notes, pending tasks, analysis timestamps, tag cloud)
   - Inline note editing with keyboard support (`Escape` to cancel)
   - Smooth card animations and non-blocking toast notifications
   - Skeleton loading states and clean empty-state illustrations
@@ -108,7 +122,11 @@ Access the app at `http://localhost:8000`.
 
 ## 🌐 Cloud Hosting & Deployment
 
-### Option 1: Render (Recommended - Free Tier)
+### Option 1: Live Hosted Public URL
+Access the running instance right now:
+👉 **[https://tech-senate-mainstream-flowers.trycloudflare.com](https://tech-senate-mainstream-flowers.trycloudflare.com)**
+
+### Option 2: Render (Free Tier Blueprint)
 
 1. Click the button below:
 
@@ -123,7 +141,7 @@ Access the app at `http://localhost:8000`.
 4. (Optional) Provide your `OPENAI_API_KEY` in environment variables.
 5. Click **Create Web Service**. Your app is live with free SSL!
 
-### Option 2: Railway / Fly.io / Koyeb
+### Option 3: Railway / Fly.io / Koyeb
 
 Life Inbox contains a `Procfile` and `Dockerfile` making it compatible out-of-the-box with any modern PaaS:
 
@@ -139,7 +157,7 @@ fly launch
 
 ## 🧪 Automated Testing
 
-Life Inbox features a comprehensive 56-test regression and migration suite:
+Life Inbox features a comprehensive 59-test regression and migration suite:
 
 ```bash
 python -m pytest tests/ -v
@@ -157,24 +175,24 @@ life-inbox/
 │   └── workflows/ci.yml       # GitHub Actions CI/CD pipeline
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                # FastAPI routes, middleware, and entrypoint
+│   ├── main.py                # FastAPI routes (items, tasks, analyze, stats, export, import)
 │   ├── database.py            # SQLAlchemy models, SQLite engine, query functions
 │   ├── organizer.py           # AI prompt orchestration & deterministic fallback engine
 │   ├── schemas.py             # Pydantic validation schemas
 │   ├── static/
-│   │   ├── app.js             # Modern reactive frontend logic & state management
-│   │   ├── styles.css         # Complete CSS custom property theming & animations
+│   │   ├── app.js             # Modern reactive frontend logic, checklists, tags, & state
+│   │   ├── styles.css         # Complete CSS custom property theming, templates, & animations
 │   │   ├── favicon.svg        # Vector app favicon
 │   │   ├── icon-192.svg       # PWA icon 192x192
 │   │   ├── icon-512.svg       # PWA icon 512x512
 │   │   └── manifest.json      # Web app manifest for PWA installation
 │   └── templates/
-│       └── index.html         # Semantic HTML5 application template
+│       └── index.html         # Semantic HTML5 template with quick templates & export/import
 ├── migrations/
 │   ├── env.py                 # Alembic environment configuration
 │   └── versions/              # Applied database migrations (0001 - 0006)
 ├── tests/
-│   ├── test_api.py            # API endpoint integration and error tests
+│   ├── test_api.py            # API endpoint integration, export, import, & error tests
 │   └── test_migrations.py     # Database schema evolution and rollback tests
 ├── Dockerfile                 # Multi-stage container definition
 ├── .dockerignore

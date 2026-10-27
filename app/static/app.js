@@ -6,6 +6,9 @@
 (() => {
   'use strict';
 
+  let currentLoadedItems = [];
+  let currentTasks = [];
+
   // --------------------------------------------------------------------------
   // Utility helpers
   // --------------------------------------------------------------------------
@@ -67,15 +70,12 @@
     `;
 
     container.appendChild(toast);
-
-    // Trigger entrance animation on next frame
     requestAnimationFrame(() => toast.classList.add('toast--visible'));
 
     const dismiss = () => {
       toast.classList.remove('toast--visible');
       toast.classList.add('toast--exit');
       toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-      // Fallback removal
       setTimeout(() => toast.remove(), 500);
     };
 
@@ -134,11 +134,11 @@
 
   function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
     const btn = $('#themeToggle');
     if (!btn) return;
-    const sunIcon = btn.querySelector('.icon-sun, [data-icon="sun"]');
-    const moonIcon = btn.querySelector('.icon-moon, [data-icon="moon"]');
-    // Convention: show sun icon in dark mode (click to go light), moon in light mode
+    const sunIcon = btn.querySelector('.icon-sun');
+    const moonIcon = btn.querySelector('.icon-moon');
     if (sunIcon) sunIcon.classList.toggle('hidden', theme === 'light');
     if (moonIcon) moonIcon.classList.toggle('hidden', theme === 'dark');
   }
@@ -157,14 +157,12 @@
         e.preventDefault();
         const section = item.dataset.section;
         navigateTo(section);
-        // Close sidebar on mobile
         const sidebar = $('.sidebar');
         if (sidebar) sidebar.classList.remove('open');
       });
     });
 
-    // Menu toggle for mobile
-    const menuToggle = $('.menu-toggle, .hamburger, [data-menu-toggle]');
+    const menuToggle = $('.menu-toggle');
     if (menuToggle) {
       menuToggle.addEventListener('click', () => {
         const sidebar = $('.sidebar');
@@ -172,11 +170,9 @@
       });
     }
 
-    // Restore from hash
     const hash = location.hash.replace('#', '');
     navigateTo(SECTIONS.includes(hash) ? hash : 'dashboard');
 
-    // Listen for hash changes
     window.addEventListener('hashchange', () => {
       const h = location.hash.replace('#', '');
       if (SECTIONS.includes(h)) navigateTo(h, false);
@@ -186,20 +182,17 @@
   function navigateTo(section, pushHash = true) {
     if (!SECTIONS.includes(section)) section = 'dashboard';
 
-    // Update sections visibility
     SECTIONS.forEach(s => {
       const el = $(`#${s}-section`);
       if (el) el.classList.toggle('hidden', s !== section);
     });
 
-    // Update active nav
     $$('.nav-item[data-section]').forEach(item => {
       item.classList.toggle('active', item.dataset.section === section);
     });
 
     if (pushHash) history.replaceState(null, '', `#${section}`);
 
-    // Lazy-load data for the section
     if (section === 'inbox') loadNotes();
     if (section === 'tasks') loadTasks();
     if (section === 'dashboard') refreshDashboard();
@@ -236,10 +229,75 @@
       btn.classList.remove('btn--loading');
       const spinner = btn.querySelector('.spinner');
       if (spinner) spinner.remove();
-      if (btn.dataset.origText) {
-        // keep existing text
-        delete btn.dataset.origText;
+      if (btn.dataset.origText) delete btn.dataset.origText;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Smart Content Formatter (Markdown, Checklists, URLs, #Tags)
+  // --------------------------------------------------------------------------
+
+  function formatInlineMarkup(text) {
+    let s = esc(text);
+    // Clickable URLs
+    s = s.replace(
+      /(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noopener" class="note-link">$1 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>'
+    );
+    // Hashtags
+    s = s.replace(
+      /(^|\s)(#[a-zA-Z0-9_\-]+)/g,
+      '$1<span class="note-tag" data-tag="$2" title="Filter by $2">$2</span>'
+    );
+    // Inline code
+    s = s.replace(/`([^`]+)`/g, '<code class="note-inline-code">$1</code>');
+    return s;
+  }
+
+  function renderSmartContent(rawText, itemId) {
+    if (!rawText) return '';
+    const lines = rawText.split('\n');
+    let checkboxCounter = 0;
+    const formatted = lines.map(line => {
+      const checkMatch = line.match(/^(\s*[-*]\s*)\[([ xX])\]\s*(.*)$/);
+      if (checkMatch) {
+        const prefix = checkMatch[1];
+        const isChecked = checkMatch[2].toLowerCase() === 'x';
+        const rest = formatInlineMarkup(checkMatch[3]);
+        const idx = checkboxCounter++;
+        return `${esc(prefix)}<label class="note-checklist-item" style="cursor:pointer;display:inline-flex;align-items:baseline;"><input type="checkbox" class="note-checkbox" data-item-id="${itemId}" data-check-idx="${idx}" ${isChecked ? 'checked' : ''}><span class="${isChecked ? 'checked-item' : ''}">${rest}</span></label>`;
       }
+      return formatInlineMarkup(line);
+    });
+    return formatted.join('<br>');
+  }
+
+  async function toggleNoteCheckbox(itemId, lineIdx) {
+    const item = currentLoadedItems.find(it => it.id === itemId);
+    if (!item || !item.raw_text) return;
+
+    const lines = item.raw_text.split('\n');
+    let currentCheckIdx = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*[-*]\s*\[([ xX])\]/.test(lines[i])) {
+        if (currentCheckIdx === lineIdx) {
+          if (/^\s*[-*]\s*\[ \]/.test(lines[i])) {
+            lines[i] = lines[i].replace(/^(\s*[-*]\s*)\[ \]/, '$1[x]');
+          } else {
+            lines[i] = lines[i].replace(/^(\s*[-*]\s*)\[[xX]\]/, '$1[ ]');
+          }
+          break;
+        }
+        currentCheckIdx++;
+      }
+    }
+    const updatedText = lines.join('\n');
+    try {
+      await api(`/api/items/${itemId}`, { method: 'PUT', body: { raw_text: updatedText } });
+      showToast('Checklist updated!', 'success');
+      await loadNotes();
+    } catch (err) {
+      showToast('Could not update checklist: ' + err.message, 'error');
     }
   }
 
@@ -261,6 +319,89 @@
       });
     }
 
+    // Quick template buttons
+    const templateMap = {
+      meeting: "#meeting with [Name]\n- Discussed: \n- Decisions: \n- Next steps: \n  - [ ] ",
+      idea: "💡 #idea [Title]\n- Problem: \n- Potential Solution: \n- First step: \n  - [ ] ",
+      checklist: "#checklist To Do / Buy:\n- [ ] Item 1\n- [ ] Item 2\n- [ ] Item 3",
+      resource: "📚 #learning [Title/Topic]\n- Link/Source: \n- Key Takeaways: ",
+      clear: "",
+    };
+
+    $$('.btn-template').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.template;
+        const t = templateMap[type];
+        if (!textarea) return;
+        if (type === 'clear') {
+          textarea.value = '';
+          textarea.focus();
+          return;
+        }
+        if (textarea.value.trim()) {
+          textarea.value += '\n\n' + t;
+        } else {
+          textarea.value = t;
+        }
+        textarea.focus();
+      });
+    });
+
+    // Export buttons
+    const exportMdBtn = $('#exportMdBtn');
+    if (exportMdBtn) {
+      exportMdBtn.addEventListener('click', () => {
+        window.location.href = '/api/export?format=markdown';
+        showToast('Exporting notes to Markdown…', 'info');
+      });
+    }
+    const exportJsonBtn = $('#exportJsonBtn');
+    if (exportJsonBtn) {
+      exportJsonBtn.addEventListener('click', () => {
+        window.location.href = '/api/export?format=json';
+        showToast('Exporting JSON backup…', 'info');
+      });
+    }
+
+    // Import modal & handler
+    const importBtn = $('#importBtn');
+    const importModal = $('#importModal');
+    const cancelImportBtn = $('#cancelImportBtn');
+    const confirmImportBtn = $('#confirmImportBtn');
+    const importText = $('#importText');
+
+    if (importBtn && importModal) {
+      importBtn.addEventListener('click', () => {
+        importModal.style.display = 'flex';
+        if (importText) { importText.value = ''; importText.focus(); }
+      });
+    }
+    if (cancelImportBtn && importModal) {
+      cancelImportBtn.addEventListener('click', () => {
+        importModal.style.display = 'none';
+      });
+    }
+    if (confirmImportBtn && importModal && importText) {
+      confirmImportBtn.addEventListener('click', async () => {
+        const val = importText.value.trim();
+        if (!val) { showToast('Please enter some notes to import.', 'error'); return; }
+        const notes = val.split(/\n\s*---\s*\n/).map(s => s.trim()).filter(Boolean);
+        if (!notes.length) { showToast('No valid notes found.', 'error'); return; }
+        setButtonLoading(confirmImportBtn, true);
+        try {
+          const res = await api('/api/import', { method: 'POST', body: { notes } });
+          showToast(`Imported ${res.imported_count} note(s)!`, 'success');
+          importModal.style.display = 'none';
+          await loadNotes();
+          refreshDashboard();
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          setButtonLoading(confirmImportBtn, false);
+        }
+      });
+    }
+
     // Search / filter form
     const form = $('#itemSearchForm');
     if (form) {
@@ -270,7 +411,6 @@
         loadNotes();
       });
       form.addEventListener('reset', (e) => {
-        // Let the browser reset first, then reload
         setTimeout(() => {
           syncFiltersToUrl();
           loadNotes();
@@ -300,6 +440,7 @@
       if (textarea) textarea.value = '';
       if (status) status.textContent = '';
       await loadNotes();
+      refreshDashboard();
     } catch (err) {
       showToast(err.message, 'error');
       if (status) status.textContent = err.message;
@@ -350,13 +491,13 @@
     try {
       const params = getFilterParams();
       const items = await api('/api/items', { params });
+      currentLoadedItems = items;
       renderNotes(container, items);
       if (statusEl) {
         statusEl.textContent = items.length
           ? `${items.length} item${items.length !== 1 ? 's' : ''} found`
           : '';
       }
-      // Update dashboard stat
       const statEl = $('#statTotalItems');
       if (statEl) statEl.textContent = items.length;
     } catch (err) {
@@ -379,12 +520,45 @@
 
     container.innerHTML = items.map(item => noteCardHTML(item)).join('');
 
-    // Attach edit / delete listeners
+    // Attach edit / delete / copy listeners
     container.querySelectorAll('[data-action="edit"]').forEach(btn => {
       btn.addEventListener('click', () => startEditNote(btn.closest('.note-card'), btn.dataset.id));
     });
     container.querySelectorAll('[data-action="delete"]').forEach(btn => {
       btn.addEventListener('click', () => deleteNote(btn.dataset.id));
+    });
+    container.querySelectorAll('[data-action="copy"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = items.find(it => String(it.id) === String(btn.dataset.id));
+        if (item && item.raw_text) {
+          navigator.clipboard.writeText(item.raw_text).then(() => {
+            showToast('Note copied to clipboard!', 'success');
+          });
+        }
+      });
+    });
+
+    // Checkbox toggles
+    container.querySelectorAll('.note-checkbox').forEach(cb => {
+      cb.addEventListener('change', async (e) => {
+        e.stopPropagation();
+        const id = parseInt(cb.dataset.itemId, 10);
+        const idx = parseInt(cb.dataset.checkIdx, 10);
+        await toggleNoteCheckbox(id, idx);
+      });
+    });
+
+    // Hashtag clicks
+    container.querySelectorAll('.note-tag').forEach(tagEl => {
+      tagEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const searchInput = $('#itemSearch');
+        if (searchInput) {
+          searchInput.value = tagEl.dataset.tag;
+          syncFiltersToUrl();
+          loadNotes();
+        }
+      });
     });
   }
 
@@ -400,10 +574,13 @@
             ${item.title ? `<h4 class="note-card__title">${esc(item.title)}</h4>` : ''}
             <span class="note-card__time" title="${esc(item.created_at)}">${relativeTime(item.created_at)}</span>
           </div>
-          <p class="note-card__text">${esc(item.raw_text)}</p>
+          <div class="note-card__text">${renderSmartContent(item.raw_text, item.id)}</div>
           ${badges.length ? `<div class="note-card__badges">${badges.join('')}</div>` : ''}
         </div>
         <div class="note-card__actions">
+          <button class="btn btn--sm btn--ghost" data-action="copy" data-id="${item.id}" title="Copy Note">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
           <button class="btn btn--sm btn--ghost" data-action="edit" data-id="${item.id}" title="Edit">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
@@ -420,16 +597,15 @@
 
   function startEditNote(card, id) {
     if (!card) return;
-    const textEl = card.querySelector('.note-card__text');
-    const actionsEl = card.querySelector('.note-card__actions');
-    if (!textEl) return;
-
-    const original = textEl.textContent;
     const bodyEl = card.querySelector('.note-card__body');
+    const actionsEl = card.querySelector('.note-card__actions');
+    const item = currentLoadedItems.find(it => String(it.id) === String(id));
+    if (!bodyEl || !item) return;
 
-    // Replace body with edit form
+    const originalText = item.raw_text;
+
     bodyEl.innerHTML = `
-      <textarea class="edit-textarea" rows="3">${esc(original)}</textarea>
+      <textarea class="edit-textarea" rows="4">${esc(originalText)}</textarea>
       <div class="edit-actions">
         <button class="btn btn--sm btn--primary save-edit-btn">Save</button>
         <button class="btn btn--sm btn--ghost cancel-edit-btn">Cancel</button>
@@ -440,7 +616,6 @@
     textarea.focus();
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 
-    // Escape to cancel
     textarea.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -473,15 +648,15 @@
     if (!confirm('Delete this note? This cannot be undone.')) return;
 
     const card = $(`.note-card[data-id="${id}"]`);
-    if (card) {
-      card.classList.add('note-card--removing');
-    }
+    if (card) card.classList.add('note-card--removing');
 
     try {
       await api(`/api/items/${id}`, { method: 'DELETE' });
       showToast('Note deleted.', 'success');
-      // Wait for animation then reload
-      setTimeout(() => loadNotes(), 300);
+      setTimeout(() => {
+        loadNotes();
+        refreshDashboard();
+      }, 300);
     } catch (err) {
       showToast(err.message, 'error');
       if (card) card.classList.remove('note-card--removing');
@@ -516,6 +691,7 @@
       showToast('Analysis complete!', 'success');
       if (statusEl) statusEl.textContent = '';
       refreshDashboard();
+      loadTasks();
     } catch (err) {
       showToast(err.message, 'error');
       if (statusEl) statusEl.textContent = `Error: ${err.message}`;
@@ -557,7 +733,6 @@
 
     let html = '';
 
-    // Mode & timestamp
     if (data.mode || data.generated_at) {
       html += `<div class="analysis-meta">`;
       if (data.mode) html += `<span class="badge badge--mode">${esc(data.mode)} mode</span>`;
@@ -565,7 +740,6 @@
       html += `</div>`;
     }
 
-    // Priority view
     if (data.priority_view) {
       html += `<div class="analysis-section"><h3 class="analysis-section__title">Priority View</h3>`;
       for (const [level, items] of Object.entries(data.priority_view)) {
@@ -582,7 +756,6 @@
       html += `</div>`;
     }
 
-    // Buckets
     if (data.buckets && data.buckets.length) {
       html += `<div class="analysis-section"><h3 class="analysis-section__title">Categories</h3>`;
       html += `<div class="buckets-grid">`;
@@ -607,7 +780,6 @@
       html += `</div></div>`;
     }
 
-    // Todos
     if (data.todos && data.todos.length) {
       html += `<div class="analysis-section"><h3 class="analysis-section__title">Suggested To-Dos</h3>`;
       html += `<div class="todo-list">`;
@@ -624,23 +796,12 @@
       html += `</div></div>`;
     }
 
-    if (!html) {
-      html = `<p class="empty-state">Analysis returned no data.</p>`;
-    }
-
-    output.innerHTML = html;
-
-    // Update dashboard stats
-    const modeEl = $('#statAnalysisMode');
-    const timeEl = $('#statLastAnalysis');
-    if (modeEl && data.mode) modeEl.textContent = data.mode;
-    if (timeEl && data.generated_at) timeEl.textContent = relativeTime(data.generated_at);
+    output.innerHTML = html || `<p class="empty-state">Analysis returned no data.</p>`;
   }
 
   function populateCategoryFilter(data) {
     const sel = $('#categoryFilter');
     if (!sel || !data || !data.buckets) return;
-    // Keep the first (empty / all) option, remove the rest
     const firstOpt = sel.querySelector('option');
     sel.innerHTML = '';
     if (firstOpt) sel.appendChild(firstOpt);
@@ -659,6 +820,29 @@
   function initTasks() {
     const filter = $('#taskStatusFilter');
     if (filter) filter.addEventListener('change', () => loadTasks());
+
+    const priFilter = $('#taskPriorityFilter');
+    if (priFilter) priFilter.addEventListener('change', () => loadTasks());
+
+    const copyBtn = $('#copyTasksBtn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', () => {
+        if (!currentTasks || !currentTasks.length) {
+          showToast('No tasks to copy.', 'info');
+          return;
+        }
+        const md = currentTasks.map(t => {
+          const check = t.status === 'completed' ? 'x' : ' ';
+          const when = t.timing_text ? ` · ${t.timing_text}` : '';
+          return `- [${check}] **${t.text}** (${t.priority}${when})`;
+        }).join('\n');
+        navigator.clipboard.writeText(md).then(() => {
+          showToast('Copied tasks to clipboard as Markdown!', 'success');
+        }).catch(() => {
+          showToast('Failed to copy to clipboard.', 'error');
+        });
+      });
+    }
   }
 
   async function loadTasks() {
@@ -669,16 +853,21 @@
     skeletonCards(container, 3);
 
     const filter = $('#taskStatusFilter');
+    const priFilter = $('#taskPriorityFilter');
     const status = filter ? filter.value : 'open';
+    const priValue = priFilter ? priFilter.value : '';
 
     try {
-      const tasks = await api('/api/tasks', { params: { status } });
+      let tasks = await api('/api/tasks', { params: { status } });
+      if (priValue) {
+        tasks = tasks.filter(t => (t.priority || '').toLowerCase() === priValue.toLowerCase());
+      }
+      currentTasks = tasks;
       renderTasks(container, tasks);
       if (statusEl) statusEl.textContent = tasks.length
         ? `${tasks.length} task${tasks.length !== 1 ? 's' : ''}`
         : '';
 
-      // Update dashboard
       const openCount = status === 'open' ? tasks.length : null;
       if (openCount !== null) {
         const statEl = $('#statOpenTasks');
@@ -697,14 +886,13 @@
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4">
             <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
-          <p>No tasks here.</p>
+          <p>No tasks found in this view.</p>
         </div>`;
       return;
     }
 
     container.innerHTML = tasks.map(task => taskCardHTML(task)).join('');
 
-    // Attach action listeners
     container.querySelectorAll('[data-task-action]').forEach(btn => {
       btn.addEventListener('click', () => handleTaskAction(btn.dataset.taskAction, btn.dataset.taskId));
     });
@@ -732,11 +920,11 @@
             ${task.priority ? `<span class="badge badge--pri badge--pri--${priClass}">${esc(task.priority)}</span>` : ''}
           </div>
           <div class="task-card__meta">
-            ${task.timing_text ? `<span class="task-card__timing">${esc(task.timing_text)}</span>` : ''}
+            ${task.timing_text ? `<span class="task-card__timing">🕒 ${esc(task.timing_text)}</span>` : ''}
             <span class="task-card__status badge badge--status--${statusClass}">${esc(task.status)}</span>
             <span class="task-card__time">${relativeTime(task.created_at)}</span>
           </div>
-          ${task.source_item_ids && task.source_item_ids.length ? `<div class="task-card__sources">Sources: ${task.source_item_ids.map(id => `<code>${esc(String(id))}</code>`).join(', ')}</div>` : ''}
+          ${task.source_item_ids && task.source_item_ids.length ? `<div class="task-card__sources">Sources: ${task.source_item_ids.map(id => `<code>#${esc(String(id))}</code>`).join(', ')}</div>` : ''}
         </div>
         <div class="task-card__actions">${actions}</div>
       </div>`;
@@ -760,6 +948,7 @@
       const labels = { complete: 'completed', dismiss: 'dismissed', reopen: 'reopened' };
       showToast(`Task ${labels[action]}!`, 'success');
       await loadTasks();
+      refreshDashboard();
     } catch (err) {
       showToast(err.message, 'error');
       setButtonLoading(btn, false);
@@ -772,31 +961,43 @@
 
   async function refreshDashboard() {
     try {
-      // Fetch items count
-      const items = await api('/api/items', { params: { limit: 1 } });
-      // We'll use a full fetch to get the count (the endpoint returns array)
-      const allItems = await api('/api/items', { params: { limit: 9999 } });
+      const stats = await api('/api/stats');
       const statTotal = $('#statTotalItems');
-      if (statTotal) statTotal.textContent = Array.isArray(allItems) ? allItems.length : 0;
-
-      // Fetch open tasks count
-      const openTasks = await api('/api/tasks', { params: { status: 'open' } });
+      if (statTotal) statTotal.textContent = stats.total_items ?? 0;
       const statOpen = $('#statOpenTasks');
-      if (statOpen) statOpen.textContent = Array.isArray(openTasks) ? openTasks.length : 0;
+      if (statOpen) statOpen.textContent = stats.open_tasks ?? 0;
+      const modeEl = $('#statAnalysisMode');
+      if (modeEl && stats.analysis_mode) modeEl.textContent = stats.analysis_mode;
+      const timeEl = $('#statLastAnalysis');
+      if (timeEl && stats.last_analysis_at) timeEl.textContent = relativeTime(stats.last_analysis_at);
 
-      // Fetch latest analysis for mode / time
-      try {
-        const analysis = await api('/api/analyze/latest');
-        if (analysis) {
-          const modeEl = $('#statAnalysisMode');
-          const timeEl = $('#statLastAnalysis');
-          if (modeEl) modeEl.textContent = analysis.mode || '—';
-          if (timeEl) timeEl.textContent = analysis.generated_at ? relativeTime(analysis.generated_at) : '—';
+      // Render tags cloud
+      const tagsWrapper = $('#dashboard-tags-wrapper');
+      const tagsContainer = $('#dashboard-tags');
+      if (tagsWrapper && tagsContainer) {
+        if (stats.top_tags && stats.top_tags.length) {
+          tagsWrapper.style.display = 'block';
+          tagsContainer.innerHTML = stats.top_tags.map(t => `
+            <button type="button" class="btn btn-sm btn-ghost note-tag-pill" data-tag-search="${esc(t.tag)}" style="padding:4px 8px;font-size:0.8rem;border:1px solid var(--border);border-radius:var(--radius-full);">
+              #${esc(t.tag)} <span style="opacity:0.6;font-size:0.75rem;">(${t.count})</span>
+            </button>
+          `).join('');
+
+          tagsContainer.querySelectorAll('[data-tag-search]').forEach(b => {
+            b.addEventListener('click', () => {
+              const searchInput = $('#itemSearch');
+              if (searchInput) searchInput.value = '#' + b.dataset.tagSearch;
+              navigateTo('inbox');
+              syncFiltersToUrl();
+              loadNotes();
+            });
+          });
+        } else {
+          tagsWrapper.style.display = 'none';
         }
-      } catch { /* no analysis yet */ }
+      }
     } catch (err) {
-      // Dashboard is best-effort
-      console.warn('Dashboard refresh error:', err);
+      console.warn('Dashboard stats error:', err);
     }
   }
 
@@ -806,7 +1007,6 @@
 
   function initKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
-      // Ctrl+Enter to submit note (handled on textarea too, but also globally)
       if (e.ctrlKey && e.key === 'Enter') {
         const active = document.activeElement;
         const textarea = $('#noteText');
@@ -830,269 +1030,8 @@
     initTasks();
     initKeyboardShortcuts();
     syncFiltersFromUrl();
-
-    // Inject dynamic styles for toasts, skeletons, spinners, and animations
-    injectDynamicStyles();
   }
 
-  function injectDynamicStyles() {
-    if ($('#life-inbox-dynamic-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'life-inbox-dynamic-styles';
-    style.textContent = `
-      /* Spinner */
-      .spinner {
-        display: inline-block;
-        width: 16px; height: 16px;
-        border: 2px solid currentColor;
-        border-right-color: transparent;
-        border-radius: 50%;
-        animation: spin .6s linear infinite;
-        vertical-align: middle;
-        margin-right: 6px;
-        opacity: .7;
-      }
-      .spinner--lg { width: 28px; height: 28px; border-width: 3px; }
-      @keyframes spin { to { transform: rotate(360deg); } }
-
-      /* Toast */
-      .toast {
-        display: flex; align-items: center; gap: 10px;
-        padding: 12px 16px;
-        border-radius: 10px;
-        background: var(--toast-bg, #fff);
-        color: var(--toast-fg, #1a1a2e);
-        box-shadow: 0 8px 30px rgba(0,0,0,.12);
-        margin-bottom: 8px;
-        transform: translateX(120%);
-        opacity: 0;
-        transition: transform .3s cubic-bezier(.4,0,.2,1), opacity .3s ease;
-        max-width: 380px;
-        font-size: .9rem;
-        pointer-events: auto;
-      }
-      [data-theme="dark"] .toast {
-        --toast-bg: #2a2a3e;
-        --toast-fg: #e0e0e8;
-        box-shadow: 0 8px 30px rgba(0,0,0,.3);
-      }
-      .toast--visible { transform: translateX(0); opacity: 1; }
-      .toast--exit { transform: translateX(120%); opacity: 0; }
-      .toast--success { border-left: 4px solid #22c55e; }
-      .toast--error { border-left: 4px solid #ef4444; }
-      .toast--info { border-left: 4px solid #3b82f6; }
-      .toast__icon { flex-shrink: 0; display: flex; }
-      .toast--success .toast__icon { color: #22c55e; }
-      .toast--error .toast__icon { color: #ef4444; }
-      .toast--info .toast__icon { color: #3b82f6; }
-      .toast__msg { flex: 1; }
-      .toast__close {
-        background: none; border: none; cursor: pointer;
-        font-size: 1.2rem; color: inherit; opacity: .5;
-        padding: 0 0 0 4px; line-height: 1;
-      }
-      .toast__close:hover { opacity: 1; }
-
-      /* Toast container */
-      .toast-container {
-        position: fixed; top: 20px; right: 20px;
-        z-index: 9999; display: flex; flex-direction: column;
-        align-items: flex-end; pointer-events: none;
-      }
-
-      /* Skeleton loading */
-      .skeleton {
-        background: linear-gradient(90deg, var(--skel-base, #e2e8f0) 25%, var(--skel-shine, #f1f5f9) 50%, var(--skel-base, #e2e8f0) 75%);
-        background-size: 200% 100%;
-        animation: shimmer 1.5s infinite;
-        border-radius: 6px;
-      }
-      [data-theme="dark"] .skeleton {
-        --skel-base: #2a2a3e;
-        --skel-shine: #3a3a50;
-      }
-      .skeleton-line { height: 14px; margin-bottom: 10px; }
-      .skeleton-line--title { height: 18px; width: 60%; }
-      .skeleton-line--short { width: 40%; }
-      .skeleton-card { padding: 20px; }
-      @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-      /* Button loading */
-      .btn--loading { opacity: .7; cursor: wait; }
-
-      /* Card removal animation */
-      .note-card--removing {
-        opacity: 0;
-        transform: translateX(30px) scale(.96);
-        transition: all .3s ease;
-      }
-
-      /* Edit textarea */
-      .edit-textarea {
-        width: 100%; padding: 10px; border-radius: 8px;
-        border: 1.5px solid var(--border-color, #d1d5db);
-        background: var(--input-bg, #fff);
-        color: inherit; font: inherit; resize: vertical;
-        margin-bottom: 8px;
-      }
-      [data-theme="dark"] .edit-textarea {
-        --border-color: #444;
-        --input-bg: #1e1e2e;
-      }
-      .edit-actions { display: flex; gap: 8px; }
-
-      /* Analysis sections */
-      .analysis-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-      .analysis-meta__time { color: var(--text-muted, #6b7280); font-size: .85rem; }
-      .analysis-section { margin-bottom: 24px; }
-      .analysis-section__title {
-        font-size: 1.05rem; font-weight: 600;
-        margin-bottom: 12px; padding-bottom: 6px;
-        border-bottom: 1px solid var(--border-color, #e5e7eb);
-      }
-      .analysis-loading { text-align: center; padding: 40px 20px; }
-      .analysis-loading p { margin-top: 12px; color: var(--text-muted, #6b7280); }
-
-      /* Priority view */
-      .priority-group { margin-bottom: 14px; }
-      .priority-group__label { font-size: .95rem; font-weight: 500; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-      .priority-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-      .priority-dot--high { background: #ef4444; }
-      .priority-dot--medium { background: #f59e0b; }
-      .priority-dot--low { background: #22c55e; }
-      .priority-list { list-style: disc; padding-left: 28px; margin: 0; }
-      .priority-list li { margin-bottom: 4px; font-size: .9rem; }
-
-      /* Buckets grid */
-      .buckets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-      .bucket-card {
-        border: 1px solid var(--border-color, #e5e7eb);
-        border-radius: 10px; padding: 14px;
-        background: var(--card-bg, #fff);
-      }
-      [data-theme="dark"] .bucket-card { --border-color: #333; --card-bg: #23233a; }
-      .bucket-card__name { font-size: .95rem; font-weight: 600; margin-bottom: 8px; }
-      .bucket-card__list { list-style: none; padding: 0; margin: 0; }
-      .bucket-card__list li {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 4px 0; font-size: .85rem;
-        border-bottom: 1px solid var(--border-color, #f0f0f0);
-      }
-      .bucket-card__list li:last-child { border-bottom: none; }
-      .bucket-card__empty { font-size: .85rem; color: var(--text-muted, #9ca3af); }
-
-      /* Todo list */
-      .todo-list { display: flex; flex-direction: column; gap: 8px; }
-      .todo-item {
-        display: flex; align-items: center; justify-content: space-between;
-        padding: 10px 14px; border-radius: 8px;
-        border: 1px solid var(--border-color, #e5e7eb);
-        background: var(--card-bg, #fff);
-        gap: 10px;
-      }
-      [data-theme="dark"] .todo-item { --border-color: #333; --card-bg: #23233a; }
-      .todo-item__main { flex: 1; }
-      .todo-item__text { display: block; font-size: .9rem; }
-      .todo-item__when { font-size: .8rem; color: var(--text-muted, #6b7280); margin-top: 2px; display: block; }
-
-      /* Badges */
-      .badge {
-        display: inline-block; font-size: .72rem; font-weight: 600;
-        padding: 2px 8px; border-radius: 20px;
-        text-transform: uppercase; letter-spacing: .03em;
-      }
-      .badge--type { background: #e0e7ff; color: #3730a3; }
-      [data-theme="dark"] .badge--type { background: #312e81; color: #a5b4fc; }
-      .badge--status { background: #f0fdf4; color: #166534; }
-      [data-theme="dark"] .badge--status { background: #14532d; color: #86efac; }
-      .badge--mode { background: #fef3c7; color: #92400e; }
-      [data-theme="dark"] .badge--mode { background: #78350f; color: #fcd34d; }
-      .badge--pri { font-size: .7rem; }
-      .badge--pri--high { background: #fef2f2; color: #b91c1c; }
-      [data-theme="dark"] .badge--pri--high { background: #7f1d1d; color: #fca5a5; }
-      .badge--pri--medium { background: #fffbeb; color: #b45309; }
-      [data-theme="dark"] .badge--pri--medium { background: #78350f; color: #fcd34d; }
-      .badge--pri--low { background: #f0fdf4; color: #166534; }
-      [data-theme="dark"] .badge--pri--low { background: #14532d; color: #86efac; }
-      .badge--status--open { background: #dbeafe; color: #1e40af; }
-      [data-theme="dark"] .badge--status--open { background: #1e3a5f; color: #93c5fd; }
-      .badge--status--completed { background: #d1fae5; color: #065f46; }
-      [data-theme="dark"] .badge--status--completed { background: #064e3b; color: #6ee7b7; }
-      .badge--status--dismissed { background: #f3f4f6; color: #6b7280; }
-      [data-theme="dark"] .badge--status--dismissed { background: #374151; color: #d1d5db; }
-
-      /* Task cards */
-      .task-card {
-        display: flex; align-items: flex-start; justify-content: space-between;
-        padding: 14px 16px; border-radius: 10px;
-        border: 1px solid var(--border-color, #e5e7eb);
-        background: var(--card-bg, #fff);
-        margin-bottom: 10px; gap: 12px;
-        transition: box-shadow .2s;
-      }
-      .task-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
-      [data-theme="dark"] .task-card { --border-color: #333; --card-bg: #23233a; }
-      [data-theme="dark"] .task-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.2); }
-      .task-card--completed { opacity: .65; }
-      .task-card--dismissed { opacity: .5; }
-      .task-card__body { flex: 1; min-width: 0; }
-      .task-card__header { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-      .task-card__text { font-size: .95rem; font-weight: 500; }
-      .task-card__meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .8rem; color: var(--text-muted, #6b7280); }
-      .task-card__timing { font-style: italic; }
-      .task-card__sources { font-size: .75rem; color: var(--text-muted, #9ca3af); margin-top: 6px; }
-      .task-card__sources code {
-        background: var(--code-bg, #f3f4f6); padding: 1px 5px; border-radius: 4px; font-size: .72rem;
-      }
-      [data-theme="dark"] .task-card__sources code { --code-bg: #374151; }
-      .task-card__actions { display: flex; gap: 6px; flex-shrink: 0; align-items: flex-start; flex-wrap: wrap; }
-
-      /* Empty state */
-      .empty-state {
-        text-align: center; padding: 40px 20px;
-        color: var(--text-muted, #6b7280); font-size: .95rem;
-      }
-      .empty-state svg { margin: 0 auto 12px; display: block; }
-
-      /* Note card */
-      .note-card {
-        display: flex; align-items: flex-start; justify-content: space-between;
-        padding: 14px 16px; border-radius: 10px;
-        border: 1px solid var(--border-color, #e5e7eb);
-        background: var(--card-bg, #fff);
-        margin-bottom: 10px; gap: 12px;
-        transition: box-shadow .2s, opacity .3s, transform .3s;
-      }
-      .note-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
-      [data-theme="dark"] .note-card:not(.skeleton-card) { --border-color: #333; --card-bg: #23233a; }
-      [data-theme="dark"] .note-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.2); }
-      .note-card__body { flex: 1; min-width: 0; }
-      .note-card__header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-      .note-card__title { font-size: .95rem; font-weight: 600; margin: 0; }
-      .note-card__time { font-size: .78rem; color: var(--text-muted, #9ca3af); white-space: nowrap; }
-      .note-card__text { font-size: .9rem; margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--text-primary, inherit); }
-      .note-card__badges { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-      .note-card__actions { display: flex; gap: 4px; flex-shrink: 0; }
-
-      /* Ghost / danger button helpers */
-      .btn--ghost { background: transparent; border: 1px solid transparent; }
-      .btn--ghost:hover { background: var(--hover-bg, rgba(0,0,0,.05)); }
-      [data-theme="dark"] .btn--ghost:hover { --hover-bg: rgba(255,255,255,.08); }
-      .btn--danger { color: #ef4444; }
-      .btn--danger:hover { background: #fef2f2; }
-      [data-theme="dark"] .btn--danger:hover { background: rgba(239,68,68,.15); }
-
-      /* Responsive */
-      @media (max-width: 768px) {
-        .buckets-grid { grid-template-columns: 1fr; }
-        .task-card, .note-card { flex-direction: column; }
-        .task-card__actions, .note-card__actions { align-self: flex-end; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  // Start the app
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

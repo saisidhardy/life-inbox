@@ -97,11 +97,28 @@
                         </div>
                     </div>
 
+                    <!-- Popular Tags Cloud -->
+                    <div id="dashboard-tags-wrapper" style="margin-bottom:24px;display:none;">
+                        <h3 style="font-size:0.95rem;color:var(--text-secondary);margin-bottom:10px;">🏷️ Popular Tags</h3>
+                        <div id="dashboard-tags" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+                    </div>
+
                     <!-- Quick Add Note Area -->
                     <div class="section-header">
                         <h2>Quick Add Note</h2>
                     </div>
+
                     <div class="input-area">
+                        <!-- Template Pills -->
+                        <div class="template-pills" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+                            <span style="font-size:0.8rem;color:var(--text-muted);align-self:center;margin-right:4px;">Templates:</span>
+                            <button type="button" class="btn btn-sm btn-ghost btn-template" data-template="meeting" style="padding:4px 10px;font-size:0.8rem;">📞 Meeting</button>
+                            <button type="button" class="btn btn-sm btn-ghost btn-template" data-template="idea" style="padding:4px 10px;font-size:0.8rem;">💡 Idea</button>
+                            <button type="button" class="btn btn-sm btn-ghost btn-template" data-template="checklist" style="padding:4px 10px;font-size:0.8rem;">🛒 Checklist</button>
+                            <button type="button" class="btn btn-sm btn-ghost btn-template" data-template="resource" style="padding:4px 10px;font-size:0.8rem;">📚 Resource</button>
+                            <button type="button" class="btn btn-sm btn-ghost btn-template" data-template="clear" style="padding:4px 10px;font-size:0.8rem;color:var(--text-muted);">🧹 Clear</button>
+                        </div>
+
                         <textarea id="noteText" placeholder="Capture a thought, task, meeting note, or reminder... (Press Ctrl+Enter to save)"></textarea>
                         <div class="input-actions">
                             <span id="noteStatus" class="status-msg" style="color:var(--text-muted);font-size:0.85rem;margin-right:auto;"></span>
@@ -117,11 +134,22 @@
                 <section id="inbox-section" class="section hidden">
                     <div class="section-header">
                         <h2>Saved Notes</h2>
+                        <div class="section-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button id="exportMdBtn" class="btn btn-sm btn-ghost" title="Export as Markdown for Obsidian/Notion">
+                                📄 Export .MD
+                            </button>
+                            <button id="exportJsonBtn" class="btn btn-sm btn-ghost" title="Export as JSON backup">
+                                📦 Export .JSON
+                            </button>
+                            <button id="importBtn" class="btn btn-sm btn-ghost" title="Batch import notes">
+                                📥 Import Notes
+                            </button>
+                        </div>
                     </div>
 
                     <form id="itemSearchForm" class="filter-bar">
                         <div class="filter-group">
-                            <input type="search" id="itemSearch" placeholder="Search text or title..." autocomplete="off">
+                            <input type="search" id="itemSearch" placeholder="Search text, #tags, or title..." autocomplete="off">
                             <select id="itemTypeFilter">
                                 <option value="">All Types</option>
                                 <option value="text">Text</option>
@@ -167,8 +195,17 @@
                 <section id="tasks-section" class="section hidden">
                     <div class="section-header">
                         <h2>Generated Tasks</h2>
-                        <div class="section-actions">
-                            <select id="taskStatusFilter" class="select" style="padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);">
+                        <div class="section-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <button id="copyTasksBtn" class="btn btn-sm btn-ghost" title="Copy visible tasks to clipboard as Markdown">
+                                📋 Copy as Markdown
+                            </button>
+                            <select id="taskPriorityFilter" class="select" style="padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:0.85rem;">
+                                <option value="">All Priorities</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                            <select id="taskStatusFilter" class="select" style="padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:0.85rem;">
                                 <option value="open">Open</option>
                                 <option value="completed">Completed</option>
                                 <option value="dismissed">Dismissed</option>
@@ -181,6 +218,19 @@
                 </section>
             </div>
         </main>
+    </div>
+
+    <!-- Batch Import Modal -->
+    <div id="importModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:540px;width:100%;box-shadow:var(--shadow-xl);background:var(--bg-secondary);">
+            <h3 style="margin-bottom:8px;">📥 Batch Import Notes</h3>
+            <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Paste multiple notes separated by <code>---</code> on a new line:</p>
+            <textarea id="importText" style="width:100%;min-height:160px;margin-bottom:14px;padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-family:inherit;font-size:0.9rem;" placeholder="Call plumber tomorrow #urgent&#10;---&#10;Idea for new productivity app #ideas&#10;---&#10;Buy groceries this weekend:&#10;- [ ] Milk&#10;- [ ] Eggs"></textarea>
+            <div style="display:flex;justify-content:flex-end;gap:8px;">
+                <button id="cancelImportBtn" class="btn btn-sm btn-ghost">Cancel</button>
+                <button id="confirmImportBtn" class="btn btn-sm btn-primary">Import Notes</button>
+            </div>
+        </div>
     </div>
 
     <!-- Mobile Bottom Navigation -->
