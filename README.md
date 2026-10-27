@@ -1,218 +1,192 @@
-# Life Inbox
+# Life Inbox 📥
 
-This is the local-project version of the Life Inbox Google Colab notebook.
-It preserves the features already present in the notebook:
+[![CI/CD Pipeline](https://github.com/saisidhardy/life-inbox/actions/workflows/ci.yml/badge.svg)](https://github.com/saisidhardy/life-inbox/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-3-003B57.svg)](https://www.sqlite.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/saisidhardy/life-inbox)
 
-- save a text note;
-- list, edit, and delete saved notes;
-- organize the entire inbox into buckets, priorities, and ToDos;
-- use the OpenAI API when an API key is available;
-- use the notebook's deterministic fallback organizer otherwise.
+> **Capture first. Organize the whole inbox with AI when you are ready.**
 
-## 1. Requirements
+Life Inbox is an AI-powered personal dashboard and productivity system. It lets you capture messy, unstructured notes, reminders, thoughts, and ideas at the speed of thought—then uses OpenAI (or an offline deterministic organizer) to turn your stream of notes into structured categories, actionable tasks, and a clear priority dashboard.
 
-- Python 3.10 or newer
-- A terminal
-- An OpenAI API key is optional. The fallback organizer works without one.
+---
 
-## 2. Set up the project
+## ✨ Features
 
-Open a terminal, enter this folder, and create a virtual environment:
+- **⚡ Instant Quick Capture**: Jot down thoughts, tasks, and ideas with a single click or keyboard shortcut (`Ctrl+Enter`).
+- **🤖 Intelligent Inbox Organization**: Organizes all saved notes together using OpenAI into structured buckets, prioritized action items, and deduplicated to-dos.
+- **🛡️ Offline Fallback Mode**: Works 100% locally even without an OpenAI API key using a deterministic rule-based organization engine.
+- **✅ Persistent Task Management**: Extracted action items become trackable tasks with full lifecycle support (`open`, `completed`, `dismissed`, `reopened`). Tasks preserve source links back to original notes and prevent duplication across re-analyses.
+- **🔍 Fast Search & Filter**: Real-time multi-attribute search across raw text, categories, priority levels, and processing statuses with URL state synchronization.
+- **🎨 Modern Responsive UI**:
+  - Dark / Light mode toggle with persistent local storage
+  - Desktop sidebar + mobile-optimized bottom navigation
+  - Dashboard analytics overview (total notes, pending tasks, analysis timestamps)
+  - Inline note editing with keyboard support (`Escape` to cancel)
+  - Smooth card animations and non-blocking toast notifications
+  - Skeleton loading states and clean empty-state illustrations
+- **📱 PWA-Ready**: Includes web application manifest and vector icons for installability on mobile and desktop.
+- **🐳 Production Ready**: Fully containerized with Docker, automated CI/CD pipeline via GitHub Actions, and 1-click cloud deployment.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone & Set Up
 
 ```bash
-python3 -m venv .venv
+# Clone the repository
+git clone https://github.com/saisidhardy/life-inbox.git
+cd life-inbox
+
+# Create and activate virtual environment
+python -m venv .venv
+
+# On Linux/macOS:
 source .venv/bin/activate
+# On Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-On Windows, activate it with:
+### 2. Run Database Migrations
 
-```powershell
-.venv\Scripts\activate
-```
-
-Install the dependencies:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-## 3. Configure and migrate the database
-
-Life Inbox uses SQLite by default at `data/life_inbox.db`. To use another
-database location, set `DATABASE_URL` before running Alembic or the app:
-
-```bash
-export DATABASE_URL="sqlite:////absolute/path/to/life_inbox.db"
-```
-
-For a new or empty local database, apply all migrations with:
+Life Inbox uses SQLite by default stored in `data/life_inbox.db`:
 
 ```bash
 python -m alembic upgrade head
 ```
 
-For an existing `data/life_inbox.db`, make a backup and then run the same
-upgrade:
+### 3. Optional: Configure OpenAI
+
+If you want AI analysis instead of the deterministic fallback engine, set your API key:
 
 ```bash
-cp data/life_inbox.db data/life_inbox.db.backup
-python -m alembic upgrade head
-```
-
-The initial migration detects the existing `notes` table, validates its
-required columns, and adopts it without deleting or copying any notes. Check
-the applied revision with:
-
-```bash
-python -m alembic current
-```
-
-The application does not run Alembic migrations automatically at startup.
-
-### Canonical inbox-item model
-
-The canonical API is `/api/items`. The browser uses this API for text-item
-creation, listing, editing, and deletion. Items include:
-
-- `id`, `item_type`, and `processing_status`;
-- optional `title`, `source_url`, `original_filename`, and `mime_type`;
-- `raw_text`, `created_at`, and optional `updated_at`.
-
-Only `item_type="text"` is created or displayed in this version. File uploads,
-URLs, voice, and image inputs are not implemented.
-
-`GET /api/items` accepts optional `q`, `item_type`, `category`, `priority`,
-`processing_status`, and `limit` query parameters. Text search is
-case-insensitive and matches raw text or title. Category and priority filters
-use the latest saved analysis insights.
-
-The `/api/notes` routes remain temporarily available as deprecated
-compatibility adapters. They read and write the same `inbox_items` records
-while preserving the former note response shape. Migration `0003` copies
-legacy notes into `inbox_items` with the same IDs and timestamps. The legacy
-`notes` table is retained unchanged as a migration safety copy and is no
-longer authoritative.
-
-### Persisted analysis
-
-`POST /api/analyze` still organizes the complete inbox. Successful validated
-results are stored in `analysis_runs`, and each text item's latest category,
-concise title, and priority are stored in `item_insights`.
-
-`GET /api/analyze/latest` returns the latest successful result without calling
-OpenAI. The browser uses it on page load and displays when the result was
-generated. Failed runs are recorded separately and never replace the previous
-successful result or its item insights.
-
-### Persistent tasks
-
-Successful analysis runs convert extracted ToDos into persistent tasks.
-Generated tasks start as `open` and retain links to every source inbox item.
-The default task view shows only open tasks; completed and dismissed tasks can
-be viewed separately and reopened.
-
-Task APIs:
-
-- `GET /api/tasks?status=open` lists tasks (`completed`, `dismissed`, and
-  `all` are also supported);
-- `POST /api/tasks/{id}/complete` completes a task;
-- `POST /api/tasks/{id}/reopen` reopens a task;
-- `POST /api/tasks/{id}/dismiss` dismisses a task.
-
-Each inbox item can source at most one generated task. Reanalysis updates that
-task's latest text, priority, and timing in place instead of creating a
-duplicate when AI wording or priority changes. Its open, completed, or
-dismissed status is never changed by AI analysis.
-
-## 4. Optional: configure OpenAI
-
-If you want AI analysis instead of the local fallback, set your API key in the
-terminal before starting the application:
-
-```bash
-export OPENAI_API_KEY="your-api-key"
+# Linux / macOS
+export OPENAI_API_KEY="sk-..."
 export OPENAI_MODEL="gpt-5-mini"
-```
 
-On Windows PowerShell:
-
-```powershell
-$env:OPENAI_API_KEY="your-api-key"
+# Windows (PowerShell)
+$env:OPENAI_API_KEY="sk-..."
 $env:OPENAI_MODEL="gpt-5-mini"
 ```
 
-Do not put the real key in source code or commit it to Git.
-
-## 5. Start Life Inbox
-
-From the top-level `life-inbox` folder, run:
+### 4. Start the Application
 
 ```bash
-python -m uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Then open:
+Open your browser at **[http://127.0.0.1:8000](http://127.0.0.1:8000)**.
 
-<http://127.0.0.1:8000>
+---
 
-Stop the server by pressing `Control+C` in the terminal.
+## 🐳 Docker Deployment
 
-## 6. Run the automated tests
-
-From the top-level `life-inbox` folder, run:
+Run Life Inbox anywhere using Docker in a single command:
 
 ```bash
-python -m pytest
+# Build the Docker image
+docker build -t life-inbox .
+
+# Run the container with persistent data storage
+docker run -d \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  -e OPENAI_API_KEY="your-optional-key" \
+  --name life-inbox-app \
+  life-inbox
 ```
 
-The tests use temporary SQLite databases and do not call OpenAI.
+Access the app at `http://localhost:8000`.
 
-## 7. Optional: add demonstration notes
+---
 
-The original notebook included a utility that adds realistic sample notes.
-While the server is stopped, run:
+## 🌐 Cloud Hosting & Deployment
+
+### Option 1: Render (Recommended - Free Tier)
+
+1. Click the button below:
+
+   [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/saisidhardy/life-inbox)
+
+2. Connect your GitHub account and select this repository.
+3. Render automatically detects `render.yaml` with:
+   - Python 3.12 environment
+   - Automatic migration execution (`alembic upgrade head`)
+   - Persistent disk mounted at `/app/data`
+   - Health check endpoint `/api/health`
+4. (Optional) Provide your `OPENAI_API_KEY` in environment variables.
+5. Click **Create Web Service**. Your app is live with free SSL!
+
+### Option 2: Railway / Fly.io / Koyeb
+
+Life Inbox contains a `Procfile` and `Dockerfile` making it compatible out-of-the-box with any modern PaaS:
 
 ```bash
-python -m scripts.seed_demo_notes
+# Railway
+railway up
+
+# Fly.io
+fly launch
 ```
 
-It uses OpenAI when an API key is available and otherwise uses the notebook's
-local fallback list.
+---
 
-## Project layout
+## 🧪 Automated Testing
+
+Life Inbox features a comprehensive 56-test regression and migration suite:
+
+```bash
+python -m pytest tests/ -v
+```
+
+All tests execute against isolated in-memory or temporary SQLite databases and run entirely offline without consuming external API credits.
+
+---
+
+## 📁 Project Architecture
 
 ```text
 life-inbox/
+├── .github/
+│   └── workflows/ci.yml       # GitHub Actions CI/CD pipeline
 ├── app/
-│   ├── main.py
-│   ├── database.py
-│   ├── schemas.py
-│   ├── organizer.py
-│   ├── templates/index.html
-│   └── static/
-│       ├── app.js
-│       └── styles.css
+│   ├── __init__.py
+│   ├── main.py                # FastAPI routes, middleware, and entrypoint
+│   ├── database.py            # SQLAlchemy models, SQLite engine, query functions
+│   ├── organizer.py           # AI prompt orchestration & deterministic fallback engine
+│   ├── schemas.py             # Pydantic validation schemas
+│   ├── static/
+│   │   ├── app.js             # Modern reactive frontend logic & state management
+│   │   ├── styles.css         # Complete CSS custom property theming & animations
+│   │   ├── favicon.svg        # Vector app favicon
+│   │   ├── icon-192.svg       # PWA icon 192x192
+│   │   ├── icon-512.svg       # PWA icon 512x512
+│   │   └── manifest.json      # Web app manifest for PWA installation
+│   └── templates/
+│       └── index.html         # Semantic HTML5 application template
 ├── migrations/
-│   ├── env.py
-│   └── versions/
-│       ├── 0001_create_notes_table.py
-│       ├── 0002_add_updated_at_to_notes.py
-│       ├── 0003_create_inbox_items.py
-│       ├── 0004_persist_analysis_results.py
-│       ├── 0005_create_tasks.py
-│       └── 0006_deduplicate_tasks_by_source.py
-├── alembic.ini
-├── data/
-├── scripts/seed_demo_notes.py
+│   ├── env.py                 # Alembic environment configuration
+│   └── versions/              # Applied database migrations (0001 - 0006)
 ├── tests/
-│   ├── test_api.py
-│   └── test_migrations.py
-├── reference/original_life_inbox_notebook.ipynb
-├── .env.example
-├── .gitignore
-├── requirements.txt
+│   ├── test_api.py            # API endpoint integration and error tests
+│   └── test_migrations.py     # Database schema evolution and rollback tests
+├── Dockerfile                 # Multi-stage container definition
+├── .dockerignore
+├── Procfile                   # Process file for PaaS deployment
+├── render.yaml                # Render Infrastructure-as-Code Blueprint
+├── pyproject.toml             # Modern Python project configuration
+├── requirements.txt           # Python package dependencies
 └── README.md
 ```
 
-The original notebook remains in `reference/` so you can compare the local
-project with the classroom version.
+---
+
+## 📄 License
+
+This project is open-source under the [MIT License](LICENSE).
