@@ -1,84 +1,208 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Life Inbox</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Inbox</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#0891b2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
-  <div class="wrap">
-    <h1>Life Inbox</h1>
-    <p class="sub">Capture first. Organize the whole inbox with AI when you are ready.</p>
+<body data-theme="light">
+    <!-- Toast notification container -->
+    <div class="toast-container"></div>
 
-    <textarea id="noteText" placeholder="Example: Met Rohan yesterday. He recommended Atomic Habits. Need to order it this weekend. Also ask him about that Gurgaon restaurant."></textarea>
-    <br />
-    <button id="addNoteButton" type="button" onclick="addNote()">Add Note</button>
-    <button id="analyzeButton" type="button" class="secondary" onclick="analyzeInbox()">Analyze Entire Inbox with AI</button>
-    <p id="noteStatus" class="status muted" role="status" aria-live="polite"></p>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>
+                    <span class="logo-icon">📥</span>
+                    <span>Life Inbox</span>
+                </h1>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-section="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-section="inbox">
+                    <span class="nav-icon">📝</span>
+                    <span>All Notes</span>
+                </button>
+                <button class="nav-item" data-section="analysis">
+                    <span class="nav-icon">✨</span>
+                    <span>AI Analysis</span>
+                </button>
+                <button class="nav-item" data-section="tasks">
+                    <span class="nav-icon">✅</span>
+                    <span>Tasks</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <p><strong>Life Inbox</strong></p>
+                <small>Capture first · Organize with AI</small>
+            </div>
+        </aside>
 
-    <h2>AI-organized inbox</h2>
-    <p id="analysisStatus" class="status muted" role="status" aria-live="polite"></p>
-    <div id="aiOutput" class="panel">
-      <span class="muted">Save a few notes, then click “Analyze Entire Inbox with AI”.</span>
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <div class="top-bar-title">
+                    <button class="menu-toggle btn btn-sm btn-ghost" aria-label="Toggle menu" style="padding:4px 8px;margin-right:8px;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                    </button>
+                    <span>Life Inbox</span>
+                </div>
+                <div class="top-bar-actions">
+                    <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+                        <svg class="icon-sun hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                        <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+                    </button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- Section: Dashboard -->
+                <section id="dashboard-section" class="section">
+                    <div class="section-header">
+                        <h2>Dashboard Overview</h2>
+                    </div>
+
+                    <div class="dashboard-stats">
+                        <div class="stat-card">
+                            <div class="stat-icon">📄</div>
+                            <div class="stat-value" id="statTotalItems">0</div>
+                            <div class="stat-label">Total Notes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⏳</div>
+                            <div class="stat-value" id="statOpenTasks">0</div>
+                            <div class="stat-label">Open Tasks</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">⚡</div>
+                            <div class="stat-value" id="statAnalysisMode" style="font-size:1.25rem;">—</div>
+                            <div class="stat-label">Analysis Mode</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🕒</div>
+                            <div class="stat-value" id="statLastAnalysis" style="font-size:1.25rem;">—</div>
+                            <div class="stat-label">Last Analysis</div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Add Note Area -->
+                    <div class="section-header">
+                        <h2>Quick Add Note</h2>
+                    </div>
+                    <div class="input-area">
+                        <textarea id="noteText" placeholder="Capture a thought, task, meeting note, or reminder... (Press Ctrl+Enter to save)"></textarea>
+                        <div class="input-actions">
+                            <span id="noteStatus" class="status-msg" style="color:var(--text-muted);font-size:0.85rem;margin-right:auto;"></span>
+                            <button id="addNoteBtn" class="btn btn-primary">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add Note
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: All Notes / Inbox -->
+                <section id="inbox-section" class="section hidden">
+                    <div class="section-header">
+                        <h2>Saved Notes</h2>
+                    </div>
+
+                    <form id="itemSearchForm" class="filter-bar">
+                        <div class="filter-group">
+                            <input type="search" id="itemSearch" placeholder="Search text or title..." autocomplete="off">
+                            <select id="itemTypeFilter">
+                                <option value="">All Types</option>
+                                <option value="text">Text</option>
+                            </select>
+                            <select id="categoryFilter">
+                                <option value="">All Categories</option>
+                            </select>
+                            <select id="priorityFilter">
+                                <option value="">All Priorities</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                            </select>
+                            <select id="processingStatusFilter">
+                                <option value="">All Statuses</option>
+                                <option value="ready">Ready</option>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+                            <button type="reset" class="btn btn-sm btn-ghost">Reset</button>
+                        </div>
+                    </form>
+                    <div id="searchStatus" class="status-msg" style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);"></div>
+
+                    <div id="notes"></div>
+                </section>
+
+                <!-- Section: Analysis -->
+                <section id="analysis-section" class="section hidden">
+                    <div class="section-header">
+                        <h2>AI Inbox Analysis</h2>
+                        <div class="section-actions">
+                            <button id="analyzeBtn" class="btn btn-primary">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                Analyze Entire Inbox with AI
+                            </button>
+                        </div>
+                    </div>
+                    <div id="analysisStatus" class="status-msg" style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);"></div>
+                    <div id="aiOutput"></div>
+                </section>
+
+                <!-- Section: Tasks -->
+                <section id="tasks-section" class="section hidden">
+                    <div class="section-header">
+                        <h2>Generated Tasks</h2>
+                        <div class="section-actions">
+                            <select id="taskStatusFilter" class="select" style="padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);">
+                                <option value="open">Open</option>
+                                <option value="completed">Completed</option>
+                                <option value="dismissed">Dismissed</option>
+                                <option value="all">All</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="taskStatus" class="status-msg" style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);"></div>
+                    <div id="tasks"></div>
+                </section>
+            </div>
+        </main>
     </div>
 
-    <h2>Tasks</h2>
-    <div class="task-toolbar">
-      <label for="taskStatusFilter">Show</label>
-      <select id="taskStatusFilter" onchange="changeTaskStatusFilter()">
-        <option value="open">Open</option>
-        <option value="completed">Completed</option>
-        <option value="dismissed">Dismissed</option>
-      </select>
-    </div>
-    <p id="taskStatus" class="status muted" role="status" aria-live="polite"></p>
-    <div id="tasks"></div>
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-nav">
+        <button class="nav-item active" data-section="dashboard">
+            <span class="nav-icon">📊</span>
+            <span>Home</span>
+        </button>
+        <button class="nav-item" data-section="inbox">
+            <span class="nav-icon">📝</span>
+            <span>Notes</span>
+        </button>
+        <button class="nav-item" data-section="analysis">
+            <span class="nav-icon">✨</span>
+            <span>AI</span>
+        </button>
+        <button class="nav-item" data-section="tasks">
+            <span class="nav-icon">✅</span>
+            <span>Tasks</span>
+        </button>
+    </nav>
 
-    <h2>Raw saved notes</h2>
-    <form id="itemSearchForm" class="search-toolbar" onsubmit="applyItemFilters(event)">
-      <label>
-        Search
-        <input id="itemSearch" type="search" maxlength="200" placeholder="Text or title" />
-      </label>
-      <label>
-        Type
-        <select id="itemTypeFilter">
-          <option value="">All</option>
-          <option value="text">Text</option>
-        </select>
-      </label>
-      <label>
-        Category
-        <select id="categoryFilter">
-          <option value="">All</option>
-        </select>
-      </label>
-      <label>
-        Priority
-        <select id="priorityFilter">
-          <option value="">All</option>
-          <option value="High">High</option>
-          <option value="Medium">Medium</option>
-          <option value="Low">Low</option>
-        </select>
-      </label>
-      <label>
-        Processing
-        <select id="processingStatusFilter">
-          <option value="">All</option>
-          <option value="ready">Ready</option>
-        </select>
-      </label>
-      <div class="search-actions">
-        <button type="submit">Search</button>
-        <button type="button" class="secondary" onclick="clearItemFilters()">Clear</button>
-      </div>
-    </form>
-    <p id="searchStatus" class="status muted" role="status" aria-live="polite"></p>
-    <div id="notes"></div>
-  </div>
-
-  <script src="/static/app.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 </html>
