@@ -4,13 +4,14 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.ai_provider import get_ai_provider
 from app.auth import is_authenticated_request
 from app.database import (
     add_item_to_db,
@@ -21,7 +22,9 @@ from app.database import (
     delete_item_from_db,
     delete_note_from_db,
     fail_analysis_run,
+    get_ai_metrics_summary,
     get_latest_successful_analysis,
+    get_stale_items,
     init_db,
     list_items_from_db,
     list_notes_from_db,
@@ -33,17 +36,25 @@ from app.database import (
 )
 from app.organizer import analyze_inbox_with_openai, validate_analysis_result
 from app.rate_limit import enforce_analyze_rate_limit
+from app.retrieval import extract_citations_from_text, retrieve_relevant_notes
 from app.schemas import (
+    AIMetricsSummary,
+    AskInboxRequest,
+    AskInboxResponse,
     InboxItem,
     InboxItemCreate,
+    InboxItemText,
     InboxItemUpdate,
+    InboxItemWithAnalysis,
     Note,
+    NoteAutoAnalysis,
     NoteCreate,
     NoteUpdate,
     PersistedAnalysis,
     Priority,
     Task,
     TaskListStatus,
+    WeeklyDigest,
 )
 
 
@@ -158,6 +169,7 @@ def get_stats():
                         tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
         top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        ai_metrics = get_ai_metrics_summary()
 
         return {
             "total_items": len(items),
@@ -167,6 +179,7 @@ def get_stats():
             "analysis_mode": latest.get("mode") if latest else None,
             "last_analysis_at": latest.get("generated_at") if latest else None,
             "top_tags": [{"tag": t[0], "count": t[1]} for t in top_tags],
+            "ai_metrics": ai_metrics,
         }
     except Exception as exc:
         logger.exception("Failed to compute stats")
@@ -284,15 +297,125 @@ def import_inbox(request: Request, payload: BatchImportPayload):
         ) from exc
 
 
-@app.post("/api/items", response_model=InboxItem)
-def create_item(payload: InboxItemCreate):
+@app.post("/api/items", response_model=Union[InboxItemWithAnalysis, InboxItem])
+def create_item(payload: InboxItemCreate, auto_process: bool = Query(False)):
     try:
-        return add_item_to_db(payload.raw_text)
+        item = add_item_to_db(payload.raw_text)
+        if auto_process:
+            provider = get_ai_provider()
+            item["auto_analysis"] = provider.auto_process_note(payload.raw_text)
+            return InboxItemWithAnalysis(**item)
+        return InboxItem(**item)
     except Exception as exc:
         logger.exception("Failed to save inbox item")
         raise HTTPException(
             status_code=500,
             detail="Unable to save item. Please try again.",
+        ) from exc
+
+
+@app.post("/api/items/{item_id}/auto-process", response_model=NoteAutoAnalysis)
+def auto_process_item(item_id: int):
+    items = list_items_from_db(limit=1000)
+    matched = next((it for it in items if it["id"] == item_id), None)
+    if not matched:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    provider = get_ai_provider()
+    return provider.auto_process_note(matched.get("raw_text") or "")
+
+
+@app.post("/api/process-note", response_model=NoteAutoAnalysis)
+def process_note_text(payload: InboxItemText):
+    provider = get_ai_provider()
+    return provider.auto_process_note(payload.raw_text)
+
+
+@app.post("/api/ask", response_model=AskInboxResponse)
+def ask_inbox(payload: AskInboxRequest):
+    try:
+        start_time = time.perf_counter()
+        notes = list_items_from_db(limit=500)
+        matched_notes, candidate_citations = retrieve_relevant_notes(
+            notes, payload.question, top_k=payload.top_k
+        )
+        provider = get_ai_provider()
+        answer = provider.ask_inbox(payload.question, matched_notes)
+        citations = extract_citations_from_text(answer, candidate_citations)
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        return AskInboxResponse(
+            question=payload.question,
+            answer=answer,
+            citations=citations,
+            notes_used_count=len(matched_notes),
+            provider=getattr(provider, "provider_name", "unknown"),
+            model=getattr(provider, "model_name", "unknown"),
+            latency_ms=latency_ms,
+        )
+    except Exception as exc:
+        logger.exception("Failed to answer question over inbox notes")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to answer question. Please try again.",
+        ) from exc
+
+
+@app.get("/api/digest/weekly", response_model=WeeklyDigest)
+def get_weekly_digest():
+    try:
+        start_time = time.perf_counter()
+        open_tasks = list_tasks_from_db("open")
+        stale_items = get_stale_items(days=7)
+        items = list_items_from_db(limit=500)
+
+        tag_counts = {}
+        for it in items:
+            text = it.get("raw_text") or ""
+            for word in text.split():
+                if word.startswith("#") and len(word) > 1:
+                    tag = word.lstrip("#").strip(".,!?;:()[]{}\"'").lower()
+                    if tag:
+                        tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        top_themes = [t[0] for t in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:8]]
+
+        provider = get_ai_provider()
+        digest_data = provider.generate_weekly_digest(open_tasks, stale_items, top_themes)
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        now = datetime.now(timezone.utc)
+        period = f"Last 7 Days (ending {now.strftime('%b %d, %Y')})"
+
+        return WeeklyDigest(
+            generated_at=now.isoformat(),
+            period=period,
+            total_notes_in_scope=len(items),
+            open_tasks_count=len(open_tasks),
+            stale_items_count=len(stale_items),
+            open_tasks=open_tasks,
+            stale_items=stale_items,
+            top_themes=top_themes,
+            executive_summary=digest_data.get("executive_summary", ""),
+            suggested_focus=digest_data.get("suggested_focus", []),
+            latency_ms=latency_ms,
+        )
+    except Exception as exc:
+        logger.exception("Failed to generate weekly digest")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to generate weekly digest. Please try again.",
+        ) from exc
+
+
+@app.get("/api/ai/metrics", response_model=AIMetricsSummary)
+def get_ai_metrics():
+    try:
+        return get_ai_metrics_summary()
+    except Exception as exc:
+        logger.exception("Failed to load AI metrics")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to load AI metrics",
         ) from exc
 
 

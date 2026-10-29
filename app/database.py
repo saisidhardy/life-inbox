@@ -9,11 +9,13 @@ from typing import Optional
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    Float,
     ForeignKey,
     Integer,
     Text,
     UniqueConstraint,
     create_engine,
+    func,
     or_,
     select,
 )
@@ -135,6 +137,24 @@ class TaskSourceItemRecord(Base):
         ForeignKey("inbox_items.id", ondelete="CASCADE"),
         primary_key=True,
     )
+
+
+class AIMetricRecord(Base):
+    __tablename__ = "ai_metrics"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operation = Column(Text, nullable=False)
+    provider = Column(Text, nullable=False)
+    model = Column(Text, nullable=False)
+    prompt_tokens = Column(Integer, nullable=False, default=0)
+    completion_tokens = Column(Integer, nullable=False, default=0)
+    total_tokens = Column(Integer, nullable=False, default=0)
+    latency_ms = Column(Float, nullable=False, default=0.0)
+    estimated_cost_usd = Column(Float, nullable=False, default=0.0)
+    status = Column(Text, nullable=False, default="success")
+    created_at = Column(Text, nullable=False)
+
 
 
 def init_db():
@@ -574,4 +594,106 @@ def backup_database_before_bulk() -> Optional[str]:
         pass
 
     return str(backup_path)
+
+
+def record_ai_metric(
+    operation: str,
+    provider: str,
+    model: str,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    latency_ms: float = 0.0,
+    estimated_cost_usd: float = 0.0,
+    status: str = "success",
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    with SessionLocal() as session:
+        rec = AIMetricRecord(
+            operation=operation,
+            provider=provider,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            latency_ms=round(latency_ms, 2),
+            estimated_cost_usd=round(estimated_cost_usd, 6),
+            status=status,
+            created_at=now,
+        )
+        session.add(rec)
+        session.commit()
+        return {
+            "id": rec.id,
+            "operation": rec.operation,
+            "provider": rec.provider,
+            "model": rec.model,
+            "prompt_tokens": rec.prompt_tokens,
+            "completion_tokens": rec.completion_tokens,
+            "total_tokens": rec.total_tokens,
+            "latency_ms": rec.latency_ms,
+            "estimated_cost_usd": rec.estimated_cost_usd,
+            "status": rec.status,
+            "created_at": rec.created_at,
+        }
+
+
+def get_ai_metrics_summary() -> dict:
+    with SessionLocal() as session:
+        total_calls = session.scalar(select(func.count(AIMetricRecord.id))) or 0
+        total_tokens = session.scalar(select(func.sum(AIMetricRecord.total_tokens))) or 0
+        total_prompt_tokens = session.scalar(select(func.sum(AIMetricRecord.prompt_tokens))) or 0
+        total_completion_tokens = session.scalar(select(func.sum(AIMetricRecord.completion_tokens))) or 0
+        total_cost_usd = session.scalar(select(func.sum(AIMetricRecord.estimated_cost_usd))) or 0.0
+        avg_latency_ms = session.scalar(select(func.avg(AIMetricRecord.latency_ms))) or 0.0
+
+        recent_records = session.scalars(
+            select(AIMetricRecord).order_by(AIMetricRecord.id.desc()).limit(10)
+        ).all()
+
+        recent_calls = [
+            {
+                "id": r.id,
+                "operation": r.operation,
+                "provider": r.provider,
+                "model": r.model,
+                "prompt_tokens": r.prompt_tokens,
+                "completion_tokens": r.completion_tokens,
+                "total_tokens": r.total_tokens,
+                "latency_ms": r.latency_ms,
+                "estimated_cost_usd": r.estimated_cost_usd,
+                "status": r.status,
+                "created_at": r.created_at,
+            }
+            for r in recent_records
+        ]
+
+        return {
+            "total_calls": int(total_calls),
+            "total_tokens": int(total_tokens),
+            "total_prompt_tokens": int(total_prompt_tokens),
+            "total_completion_tokens": int(total_completion_tokens),
+            "total_cost_usd": round(float(total_cost_usd), 6),
+            "avg_latency_ms": round(float(avg_latency_ms), 2),
+            "recent_calls": recent_calls,
+        }
+
+
+def get_stale_items(days: int = 7) -> list[dict]:
+    """Retrieve inbox items created more than `days` ago."""
+    cutoff = datetime.now(timezone.utc).timestamp() - (days * 86400)
+    with SessionLocal() as session:
+        items = session.scalars(select(InboxItemRecord).order_by(InboxItemRecord.id.desc())).all()
+        stale = []
+        for it in items:
+            try:
+                # Handle varying ISO formats
+                cleaned_ts = it.created_at.replace("Z", "+00:00")
+                item_ts = datetime.fromisoformat(cleaned_ts).timestamp()
+                if item_ts <= cutoff:
+                    stale.append(_item_to_dict(it))
+            except Exception:
+                pass
+        return stale
+
 

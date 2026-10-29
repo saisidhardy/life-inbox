@@ -101,6 +101,72 @@
                         </div>
                     </div>
 
+                    <!-- AI Operations & Cost Telemetry -->
+                    <div class="ai-telemetry-card" style="background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:24px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                            <h3 style="font-size:0.95rem;font-weight:600;display:flex;align-items:center;gap:6px;">
+                                <span>📊</span> AI Cost & Latency Telemetry
+                            </h3>
+                            <span class="badge badge--mode" id="telemetryProviderBadge">Offline Mock ($0.00)</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:12px;">
+                            <div style="padding:10px;border-radius:var(--radius-md);background:var(--bg-subtle, #f8fafc);border:1px solid var(--border);">
+                                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">AI Calls</div>
+                                <div id="metricTotalCalls" style="font-size:1.2rem;font-weight:700;">0</div>
+                            </div>
+                            <div style="padding:10px;border-radius:var(--radius-md);background:var(--bg-subtle, #f8fafc);border:1px solid var(--border);">
+                                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Total Tokens</div>
+                                <div id="metricTotalTokens" style="font-size:1.2rem;font-weight:700;">0</div>
+                            </div>
+                            <div style="padding:10px;border-radius:var(--radius-md);background:var(--bg-subtle, #f8fafc);border:1px solid var(--border);">
+                                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Avg Latency</div>
+                                <div id="metricAvgLatency" style="font-size:1.2rem;font-weight:700;">0 ms</div>
+                            </div>
+                            <div style="padding:10px;border-radius:var(--radius-md);background:var(--bg-subtle, #f8fafc);border:1px solid var(--border);">
+                                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;">Est. Cost</div>
+                                <div id="metricTotalCost" style="font-size:1.2rem;font-weight:700;color:var(--color-primary, #0284c7);">$0.000000</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ask Your Inbox Card -->
+                    <div class="ask-inbox-card" style="background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:24px;">
+                        <h3 style="font-size:1rem;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                            <span>🔍</span> Ask Your Inbox
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">
+                            Ask natural-language questions across your saved notes with BM25 retrieval and source citations.
+                        </p>
+                        <form id="askInboxForm" style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <input type="text" id="askInboxInput" placeholder="e.g., What are the key priorities and deadlines mentioned in my notes?" style="flex:1;min-width:240px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-md);font-size:0.9rem;" required>
+                            <button type="submit" id="askInboxBtn" class="btn btn-primary" style="white-space:nowrap;">
+                                <span>Ask AI</span>
+                            </button>
+                        </form>
+                        <div id="askInboxResult" style="margin-top:14px;display:none;padding:14px;background:var(--bg-subtle, #f8fafc);border-radius:var(--radius-md);border:1px solid var(--border);">
+                            <div id="askInboxAnswer" style="font-size:0.92rem;line-height:1.6;margin-bottom:12px;"></div>
+                            <div id="askInboxCitations" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                                <span style="font-size:0.78rem;font-weight:600;color:var(--text-muted);">Sources Used:</span>
+                                <div id="askInboxCitationsList" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Weekly AI Digest Card -->
+                    <div class="weekly-digest-card" style="background:var(--card-bg, #fff);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:24px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                            <h3 style="font-size:1rem;font-weight:600;display:flex;align-items:center;gap:6px;">
+                                <span>📑</span> Weekly AI Digest
+                            </h3>
+                            <button id="refreshDigestBtn" class="btn btn-sm btn-ghost" style="padding:4px 10px;font-size:0.8rem;">
+                                <span>⚡ Generate Digest</span>
+                            </button>
+                        </div>
+                        <div id="weeklyDigestContent">
+                            <p style="font-size:0.85rem;color:var(--text-muted);">Click "Generate Digest" to synthesize open tasks, stale notes older than 7 days, and recurring themes.</p>
+                        </div>
+                    </div>
+
                     <!-- Popular Tags Cloud -->
                     <div id="dashboard-tags-wrapper" style="margin-bottom:24px;display:none;">
                         <h3 style="font-size:0.95rem;color:var(--text-secondary);margin-bottom:10px;">🏷️ Popular Tags</h3>

@@ -500,8 +500,15 @@
     if (status) status.textContent = 'Adding…';
 
     try {
-      await api('/api/items', { method: 'POST', body: { raw_text: text } });
-      showToast('Note added!', 'success');
+      const saved = await api('/api/items?auto_process=true', { method: 'POST', body: { raw_text: text } });
+      if (saved && saved.auto_analysis) {
+        const cat = saved.auto_analysis.category || 'General';
+        const taskCount = (saved.auto_analysis.extracted_tasks || []).length;
+        const taskMsg = taskCount > 0 ? ` (${taskCount} task${taskCount > 1 ? 's' : ''} extracted)` : '';
+        showToast(`Note captured! AI categorized as [${cat}]${taskMsg}`, 'success');
+      } else {
+        showToast('Note added!', 'success');
+      }
       if (textarea) textarea.value = '';
       if (status) status.textContent = '';
       await loadNotes();
@@ -1036,6 +1043,24 @@
       const timeEl = $('#statLastAnalysis');
       if (timeEl && stats.last_analysis_at) timeEl.textContent = relativeTime(stats.last_analysis_at);
 
+      // AI Metrics Telemetry
+      if (stats.ai_metrics) {
+        const m = stats.ai_metrics;
+        const totalCallsEl = $('#metricTotalCalls');
+        if (totalCallsEl) totalCallsEl.textContent = m.total_calls;
+        const totalTokensEl = $('#metricTotalTokens');
+        if (totalTokensEl) totalTokensEl.textContent = (m.total_tokens || 0).toLocaleString();
+        const avgLatencyEl = $('#metricAvgLatency');
+        if (avgLatencyEl) avgLatencyEl.textContent = `${Math.round(m.avg_latency_ms || 0)} ms`;
+        const totalCostEl = $('#metricTotalCost');
+        if (totalCostEl) totalCostEl.textContent = `$${(m.total_cost_usd || 0).toFixed(6)}`;
+
+        const badge = $('#telemetryProviderBadge');
+        if (badge) {
+          badge.textContent = `${m.total_calls} calls · $${(m.total_cost_usd || 0).toFixed(4)}`;
+        }
+      }
+
       // Render tags cloud
       const tagsWrapper = $('#dashboard-tags-wrapper');
       const tagsContainer = $('#dashboard-tags');
@@ -1096,6 +1121,98 @@
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Ask Your Inbox & Weekly Digest (Phase 3 AI features)
+  // --------------------------------------------------------------------------
+
+  function initAskInbox() {
+    const form = $('#askInboxForm');
+    const input = $('#askInboxInput');
+    const resultBox = $('#askInboxResult');
+    const answerEl = $('#askInboxAnswer');
+    const citationsList = $('#askInboxCitationsList');
+    const btn = $('#askInboxBtn');
+
+    if (!form || !input) return;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const question = input.value.trim();
+      if (!question) return;
+
+      setButtonLoading(btn, true);
+      try {
+        const data = await api('/api/ask', {
+          method: 'POST',
+          body: { question, top_k: 5 },
+        });
+
+        resultBox.style.display = 'block';
+        answerEl.innerHTML = esc(data.answer).replace(/\n/g, '<br>');
+
+        if (data.citations && data.citations.length) {
+          citationsList.innerHTML = data.citations.map(c => `
+            <button type="button" class="btn btn-sm btn-ghost citation-pill" data-cite-id="${c.id}" title="${esc(c.snippet)}" style="padding:2px 8px;font-size:0.78rem;border:1px solid var(--border);border-radius:var(--radius-full);cursor:pointer;">
+              📌 Note #${c.id} (${(c.relevance_score || 0).toFixed(2)})
+            </button>
+          `).join('');
+
+          citationsList.querySelectorAll('.citation-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+              const citeId = pill.dataset.citeId;
+              const searchInput = $('#itemSearch');
+              if (searchInput) searchInput.value = citeId;
+              navigateTo('inbox');
+              syncFiltersToUrl();
+              loadNotes();
+            });
+          });
+        } else {
+          citationsList.innerHTML = '<span style="font-size:0.75rem;color:var(--text-muted);">None cited</span>';
+        }
+        showToast('Answer synthesized from inbox notes', 'success');
+        refreshDashboard();
+      } catch (err) {
+        showToast(`Failed to query inbox: ${err.message}`, 'error');
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    });
+  }
+
+  function initWeeklyDigest() {
+    const btn = $('#refreshDigestBtn');
+    const content = $('#weeklyDigestContent');
+    if (!btn || !content) return;
+
+    btn.addEventListener('click', async () => {
+      setButtonLoading(btn, true);
+      try {
+        const digest = await api('/api/digest/weekly');
+        let html = `
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">${esc(digest.period)} · ${digest.total_notes_in_scope} notes evaluated (${digest.latency_ms} ms)</div>
+          <div style="font-size:0.92rem;line-height:1.5;margin-bottom:12px;">${esc(digest.executive_summary)}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+            <span class="badge badge--status" style="background:#fef3c7;color:#92400e;">⏳ ${digest.open_tasks_count} Open Tasks</span>
+            <span class="badge badge--status" style="background:#fee2e2;color:#991b1b;">⚠️ ${digest.stale_items_count} Stale Notes (&gt;7d)</span>
+          </div>
+        `;
+        if (digest.suggested_focus && digest.suggested_focus.length) {
+          html += `<div style="font-size:0.85rem;font-weight:600;margin-bottom:4px;">Actionable Focus Points:</div><ul style="padding-left:18px;font-size:0.85rem;line-height:1.4;">`;
+          html += digest.suggested_focus.map(f => `<li>${esc(f)}</li>`).join('');
+          html += `</ul>`;
+        }
+        content.innerHTML = html;
+        showToast('Weekly digest generated', 'success');
+        refreshDashboard();
+      } catch (err) {
+        showToast(`Failed to generate digest: ${err.message}`, 'error');
+      } finally {
+        setButtonLoading(btn, false);
+      }
+    });
+  }
+
   function init() {
     initTheme();
     initAuthUI();
@@ -1103,6 +1220,8 @@
     initNotes();
     initAnalysis();
     initTasks();
+    initAskInbox();
+    initWeeklyDigest();
     initKeyboardShortcuts();
     syncFiltersFromUrl();
   }

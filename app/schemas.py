@@ -53,6 +53,22 @@ class InboxItemUpdate(InboxItemText):
     pass
 
 
+Priority = Literal["High", "Medium", "Low"]
+
+
+class ExtractedTask(BaseModel):
+    title: str = Field(..., min_length=1)
+    priority: Priority = "Medium"
+    due_date: Optional[str] = None
+
+
+class NoteAutoAnalysis(BaseModel):
+    category: str = Field("General", min_length=1)
+    suggested_tags: List[str] = Field(default_factory=list)
+    extracted_tasks: List[ExtractedTask] = Field(default_factory=list)
+    summary: str = Field("", max_length=500)
+
+
 class InboxItem(BaseModel):
     id: int
     item_type: str
@@ -66,7 +82,8 @@ class InboxItem(BaseModel):
     updated_at: Optional[str]
 
 
-Priority = Literal["High", "Medium", "Low"]
+class InboxItemWithAnalysis(InboxItem):
+    auto_analysis: Optional[NoteAutoAnalysis] = None
 AnalysisMode = Literal[
     "openai",
     "fallback_no_api_call",
@@ -175,3 +192,69 @@ class Task(BaseModel):
     source_item_ids: List[int]
     created_at: str
     updated_at: str
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 AI Differentiator Schemas
+# ---------------------------------------------------------------------------
+
+
+class NoteCitation(BaseModel):
+    id: int
+    title: Optional[str] = None
+    snippet: str
+    relevance_score: float
+
+
+class AskInboxRequest(BaseModel):
+    question: str = Field(..., min_length=2, max_length=500)
+    top_k: int = Field(5, ge=1, le=20)
+
+
+class AskInboxResponse(BaseModel):
+    question: str
+    answer: str
+    citations: List[NoteCitation] = Field(default_factory=list)
+    notes_used_count: int = 0
+    provider: str
+    model: str
+    latency_ms: float = 0.0
+
+
+class WeeklyDigest(BaseModel):
+    generated_at: str
+    period: str
+    total_notes_in_scope: int
+    open_tasks_count: int
+    stale_items_count: int
+    open_tasks: List[dict] = Field(default_factory=list)
+    stale_items: List[dict] = Field(default_factory=list)
+    top_themes: List[str] = Field(default_factory=list)
+    executive_summary: str
+    suggested_focus: List[str] = Field(default_factory=list)
+    latency_ms: float = 0.0
+
+
+class AIMetricItem(BaseModel):
+    id: int
+    operation: str
+    provider: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    latency_ms: float
+    estimated_cost_usd: float
+    status: str
+    created_at: str
+
+
+class AIMetricsSummary(BaseModel):
+    total_calls: int = 0
+    total_tokens: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_cost_usd: float = 0.0
+    avg_latency_ms: float = 0.0
+    recent_calls: List[AIMetricItem] = Field(default_factory=list)
+
