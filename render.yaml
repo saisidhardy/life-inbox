@@ -1,24 +1,32 @@
+# Render Blueprint Specification for Life Inbox
+# Deploy with one click: https://render.com/deploy
 databases: []
 
 services:
   - type: web
     name: life-inbox
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt && python -m alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: life-inbox-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.0"
       - key: DATABASE_URL
         value: sqlite:///data/life_inbox.db
+      - key: APP_TOKEN
+        generateValue: true
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5-mini
-    healthCheckPath: /api/health
-    autoDeploy: true
-    disk:
-      name: life-inbox-data
-      mountPath: /app/data
-      sizeGB: 1
+      - key: ANALYZE_RATE_LIMIT_PER_MINUTE
+        value: "5"
+      - key: ANALYZE_DAILY_CAP
+        value: "50"
