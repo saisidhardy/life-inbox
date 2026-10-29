@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="tealGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0d9488" />
+      <stop offset="100%" stop-color="#14b8a6" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="640" fill="url(#bg)" />
+
+  <!-- Top Navigation Mock -->
+  <rect x="40" y="30" width="1120" height="60" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1" />
+  <circle cx="70" cy="60" r="14" fill="#0d9488" />
+  <text x="63" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="bold" fill="#ffffff">📥</text>
+  <text x="96" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="700" fill="#f8fafc">Life Inbox</text>
+  <text x="200" y="65" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#94a3b8">Capture at thought speed · Synthesize with grounded AI</text>
+
+  <!-- Auth & Status badges -->
+  <rect x="960" y="45" width="180" height="30" rx="6" fill="#0f172a" stroke="#0d9488" stroke-width="1" />
+  <circle cx="980" cy="60" r="5" fill="#10b981" />
+  <text x="995" y="65" font-family="monospace" font-size="12" fill="#2dd4bf">APP_TOKEN Active</text>
+
+  <!-- Main Left Card: Capture & Inbox -->
+  <rect x="40" y="110" width="680" height="490" rx="14" fill="url(#cardGrad)" stroke="#334155" stroke-width="1" filter="url(#shadow)" />
+  
+  <!-- Capture Area -->
+  <rect x="65" y="135" width="630" height="110" rx="8" fill="#0f172a" stroke="#475569" stroke-width="1" />
+  <text x="85" y="165" font-family="monospace" font-size="14" fill="#e2e8f0">Meeting with Sarah &amp; Mark about Q4 roadmap. We agreed to</text>
+  <text x="85" y="190" font-family="monospace" font-size="14" fill="#e2e8f0">prioritize mobile redesign. Need to send updated pitch deck to</text>
+  <text x="85" y="215" font-family="monospace" font-size="14" fill="#2dd4bf">Alex by Friday. Mark will review analytics next week.</text>
+
+  <rect x="560" y="200" width="125" height="34" rx="6" fill="url(#tealGrad)" />
+  <text x="575" y="222" font-family="-apple-system, sans-serif" font-size="13" font-weight="600" fill="#ffffff">Capture (Ctrl+↵)</text>
+
+  <!-- Parsed Note Card in Feed -->
+  <rect x="65" y="270" width="630" height="180" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1" />
+  
+  <!-- Note Header & Category Badge -->
+  <rect x="85" y="290" width="70" height="24" rx="4" fill="#0369a1" />
+  <text x="100" y="306" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#ffffff">Work</text>
+  <rect x="165" y="290" width="65" height="24" rx="4" fill="#334155" />
+  <text x="175" y="306" font-family="monospace" font-size="12" fill="#94a3b8">#work</text>
+  <rect x="238" y="290" width="85" height="24" rx="4" fill="#334155" />
+  <text x="248" y="306" font-family="monospace" font-size="12" fill="#94a3b8">#roadmap</text>
+
+  <text x="85" y="340" font-family="-apple-system, sans-serif" font-size="14" font-weight="500" fill="#cbd5e1">Meeting with Sarah &amp; Mark about Q4 roadmap. We agreed to prioritize...</text>
+
+  <!-- Extracted Tasks -->
+  <rect x="85" y="360" width="590" height="34" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1" />
+  <rect x="95" y="371" width="12" height="12" rx="2" fill="none" stroke="#2dd4bf" stroke-width="2" />
+  <text x="115" y="382" font-family="-apple-system, sans-serif" font-size="13" fill="#f1f5f9">Send updated pitch deck to Alex</text>
+  <rect x="520" y="366" width="65" height="20" rx="4" fill="#991b1b" />
+  <text x="532" y="380" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" fill="#fecaca">P0 High</text>
+  <text x="600" y="380" font-family="monospace" font-size="11" fill="#facc15">Fri</text>
+
+  <rect x="85" y="402" width="590" height="34" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1" />
+  <rect x="95" y="413" width="12" height="12" rx="2" fill="none" stroke="#2dd4bf" stroke-width="2" />
+  <text x="115" y="424" font-family="-apple-system, sans-serif" font-size="13" fill="#f1f5f9">Review analytics next week</text>
+  <rect x="520" y="408" width="80" height="20" rx="4" fill="#854d0e" />
+  <text x="530" y="422" font-family="-apple-system, sans-serif" font-size="11" font-weight="bold" fill="#fef08a">P1 Medium</text>
+
+  <!-- Footer Actions -->
+  <text x="85" y="480" font-family="-apple-system, sans-serif" font-size="12" fill="#64748b">Auto-processed with Pydantic JSON schema · 0ms latency · 0 tokens</text>
+
+  <!-- Right Column: AI Assistant & Observability -->
+  <!-- Ask Your Inbox Card -->
+  <rect x="745" y="110" width="415" height="235" rx="14" fill="url(#cardGrad)" stroke="#334155" stroke-width="1" filter="url(#shadow)" />
+  <text x="770" y="145" font-family="-apple-system, sans-serif" font-size="16" font-weight="700" fill="#f8fafc">🔍 Ask Your Inbox (BM25)</text>
+  
+  <rect x="770" y="165" width="365" height="38" rx="6" fill="#0f172a" stroke="#475569" stroke-width="1" />
+  <text x="785" y="189" font-family="-apple-system, sans-serif" font-size="13" fill="#94a3b8">When do I need to send the pitch deck?</text>
+
+  <rect x="770" y="215" width="365" height="110" rx="8" fill="#1e293b" stroke="#0d9488" stroke-width="1" />
+  <text x="785" y="240" font-family="-apple-system, sans-serif" font-size="13" fill="#f8fafc">Based on your notes: <tspan fill="#2dd4bf" font-weight="bold">[Note #1]</tspan>,</text>
+  <text x="785" y="260" font-family="-apple-system, sans-serif" font-size="13" fill="#cbd5e1">you need to send the updated pitch deck</text>
+  <text x="785" y="280" font-family="-apple-system, sans-serif" font-size="13" fill="#cbd5e1">to Alex by <tspan fill="#facc15" font-weight="bold">Friday</tspan>.</text>
+  <text x="785" y="308" font-family="monospace" font-size="11" fill="#64748b">Ranked top 1 of 28 notes in 2.1ms</text>
+
+  <!-- AI Telemetry Card -->
+  <rect x="745" y="365" width="415" height="235" rx="14" fill="url(#cardGrad)" stroke="#334155" stroke-width="1" filter="url(#shadow)" />
+  <text x="770" y="400" font-family="-apple-system, sans-serif" font-size="16" font-weight="700" fill="#f8fafc">⚡ AI Observability &amp; Evals</text>
+  
+  <rect x="770" y="420" width="170" height="60" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" />
+  <text x="785" y="442" font-family="-apple-system, sans-serif" font-size="12" fill="#94a3b8">Task F1 Score</text>
+  <text x="785" y="468" font-family="monospace" font-size="20" font-weight="bold" fill="#10b981">0.9024</text>
+
+  <rect x="965" y="420" width="170" height="60" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" />
+  <text x="980" y="442" font-family="-apple-system, sans-serif" font-size="12" fill="#94a3b8">Valid JSON Rate</text>
+  <text x="980" y="468" font-family="monospace" font-size="20" font-weight="bold" fill="#10b981">100.0%</text>
+
+  <rect x="770" y="495" width="170" height="60" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" />
+  <text x="785" y="517" font-family="-apple-system, sans-serif" font-size="12" fill="#94a3b8">Priority Accuracy</text>
+  <text x="785" y="543" font-family="monospace" font-size="20" font-weight="bold" fill="#14b8a6">86.5%</text>
+
+  <rect x="965" y="495" width="170" height="60" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1" />
+  <text x="980" y="517" font-family="-apple-system, sans-serif" font-size="12" fill="#94a3b8">Due Date Accuracy</text>
+  <text x="980" y="543" font-family="monospace" font-size="20" font-weight="bold" fill="#14b8a6">83.8%</text>
+
+  <text x="770" y="585" font-family="-apple-system, sans-serif" font-size="12" fill="#64748b">Verified in CI on 28 benchmark notes · 92 tests passing</text>
+</svg>

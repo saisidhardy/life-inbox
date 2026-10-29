@@ -1,6 +1,6 @@
 # Life Inbox — AI Evaluation Report
 
-*Generated on 2026-10-29 18:08 UTC*  
+*Generated on 2026-10-29 18:24 UTC*  
 *Dataset: `evals/dataset.json` (28 benchmark notes)*  
 *Provider Mode: `mock`*  
 *Models Evaluated: `mock (Baseline)` vs `mock (Structured)`*
@@ -18,7 +18,7 @@
 | **Task F1 Score** | `0.6349` | `0.9024` | **+0.2675** |
 | **Priority Accuracy** | `55.0%` | `86.5%` | **+31.5%** |
 | **Due Date Accuracy** | `40.0%` | `83.8%` | **+43.8%** |
-| **Avg Latency** | `4.6 ms` | `4.2 ms` | `-0.4 ms` |
+| **Avg Latency** | `7.5 ms` | `6.6 ms` | `-0.9 ms` |
 | **Total Cost** | `$0.00000` | `$0.00000` | `$+0.00000` |
 
 ---
