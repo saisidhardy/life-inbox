@@ -34,11 +34,47 @@
     return `${years}y ago`;
   }
 
-  /** Sanitize a string for safe insertion as HTML text content. */
+  /** Sanitize a string for safe insertion as HTML text content or attribute values. */
   function esc(str) {
-    const d = document.createElement('div');
-    d.textContent = str ?? '';
-    return d.innerHTML;
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  const AUTH_STORAGE_KEY = 'life_inbox_token';
+
+  function getStoredAuthToken() {
+    try {
+      return localStorage.getItem(AUTH_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  function setStoredAuthToken(token) {
+    try {
+      if (token) {
+        localStorage.setItem(AUTH_STORAGE_KEY, token.trim());
+      } else {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    } catch { /* ignore */ }
+  }
+
+  function promptForAuthToken(message) {
+    const current = getStoredAuthToken();
+    const promptMsg = message || 'Enter your Life Inbox Access Token (APP_TOKEN):';
+    const entered = window.prompt(promptMsg, current);
+    if (entered !== null) {
+      setStoredAuthToken(entered);
+      showToast(entered ? 'Access token saved.' : 'Access token cleared.', 'info');
+      return entered.trim();
+    }
+    return null;
   }
 
   /** Shorthand for querySelector. */
@@ -98,12 +134,30 @@
       const qs = sp.toString();
       if (qs) url += `?${qs}`;
     }
-    const fetchOpts = { method, headers: {} };
+    const fetchOpts = { method, headers: opts.headers ? { ...opts.headers } : {} };
     if (body !== undefined) {
       fetchOpts.headers['Content-Type'] = 'application/json';
       fetchOpts.body = JSON.stringify(body);
     }
-    const res = await fetch(url, fetchOpts);
+
+    const token = getStoredAuthToken();
+    if (token) {
+      fetchOpts.headers['Authorization'] = `Bearer ${token}`;
+      fetchOpts.headers['X-App-Token'] = token;
+    }
+
+    let res = await fetch(url, fetchOpts);
+
+    // If unauthorized on an API call, prompt user for token and retry once
+    if (res.status === 401 && path.startsWith('/api/') && path !== '/api/health') {
+      const enteredToken = promptForAuthToken('Life Inbox requires an access token (APP_TOKEN):');
+      if (enteredToken) {
+        fetchOpts.headers['Authorization'] = `Bearer ${enteredToken}`;
+        fetchOpts.headers['X-App-Token'] = enteredToken;
+        res = await fetch(url, fetchOpts);
+      }
+    }
+
     if (res.status === 204) return null;
     if (!res.ok) {
       let detail = `Request failed (${res.status})`;
@@ -238,24 +292,33 @@
   // --------------------------------------------------------------------------
 
   function formatInlineMarkup(text) {
+    if (!text) return '';
+    // Escape all HTML characters first (XSS prevention)
     let s = esc(text);
-    // Clickable URLs
+
+    // Clickable URLs (must strictly start with http:// or https:// and contain only valid safe URL characters)
     s = s.replace(
-      /(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener" class="note-link">$1 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>'
+      /(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&*+,;=%]+[a-zA-Z0-9/])/g,
+      match => {
+        if (!/^https?:\/\//i.test(match)) return match;
+        return `<a href="${match}" target="_blank" rel="noopener noreferrer" class="note-link">${match} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>`;
+      }
     );
-    // Hashtags
+
+    // Hashtags (strictly safe characters)
     s = s.replace(
       /(^|\s)(#[a-zA-Z0-9_\-]+)/g,
       '$1<span class="note-tag" data-tag="$2" title="Filter by $2">$2</span>'
     );
-    // Inline code
+
+    // Inline code (escaped content)
     s = s.replace(/`([^`]+)`/g, '<code class="note-inline-code">$1</code>');
     return s;
   }
 
   function renderSmartContent(rawText, itemId) {
     if (!rawText) return '';
+    const safeId = parseInt(itemId, 10) || 0;
     const lines = rawText.split('\n');
     let checkboxCounter = 0;
     const formatted = lines.map(line => {
@@ -265,10 +328,12 @@
         const isChecked = checkMatch[2].toLowerCase() === 'x';
         const rest = formatInlineMarkup(checkMatch[3]);
         const idx = checkboxCounter++;
-        return `${esc(prefix)}<label class="note-checklist-item" style="cursor:pointer;display:inline-flex;align-items:baseline;"><input type="checkbox" class="note-checkbox" data-item-id="${itemId}" data-check-idx="${idx}" ${isChecked ? 'checked' : ''}><span class="${isChecked ? 'checked-item' : ''}">${rest}</span></label>`;
+        return `${esc(prefix)}<label class="note-checklist-item" style="cursor:pointer;display:inline-flex;align-items:baseline;"><input type="checkbox" class="note-checkbox" data-item-id="${safeId}" data-check-idx="${idx}" ${isChecked ? 'checked' : ''}><span class="${isChecked ? 'checked-item' : ''}">${rest}</span></label>`;
       }
       return formatInlineMarkup(line);
     });
+    return formatted.join('<br>');
+  }
     return formatted.join('<br>');
   }
 
@@ -1022,8 +1087,18 @@
   // Init
   // --------------------------------------------------------------------------
 
+  function initAuthUI() {
+    const btn = $('#tokenConfigBtn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        promptForAuthToken('Configure Life Inbox Access Token (APP_TOKEN):');
+      });
+    }
+  }
+
   function init() {
     initTheme();
+    initAuthUI();
     initNavigation();
     initNotes();
     initAnalysis();

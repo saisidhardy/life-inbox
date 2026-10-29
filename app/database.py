@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -500,3 +501,77 @@ def set_task_status(task_id: int, task_status: str) -> Optional[dict]:
             task.updated_at = datetime.now(timezone.utc).isoformat()
             session.commit()
         return _task_to_dict(session, task)
+
+
+def batch_add_items_to_db(raw_texts: list[str]) -> list[dict]:
+    """Insert multiple inbox items in a single atomic database transaction.
+
+    Rolls back completely if any insertion fails.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    with SessionLocal() as session:
+        try:
+            records = []
+            for text in raw_texts:
+                cleaned = text.strip()
+                if cleaned:
+                    item = InboxItemRecord(
+                        item_type=TEXT_ITEM_TYPE,
+                        raw_text=cleaned,
+                        processing_status=READY_STATUS,
+                        created_at=now,
+                    )
+                    session.add(item)
+                    records.append(item)
+            session.commit()
+            return [_item_to_dict(item) for item in records]
+        except Exception:
+            session.rollback()
+            raise
+
+
+def backup_database_before_bulk() -> Optional[str]:
+    """Create a backup of the SQLite database before bulk write operations.
+
+    Retains the most recent 10 backups and silently skips in-memory or nonexistent files.
+    """
+    db_url = os.getenv("DATABASE_URL", DATABASE_URL)
+    if not db_url.startswith("sqlite:///"):
+        return None
+
+    db_path_str = db_url.replace("sqlite:///", "")
+    if not db_path_str or db_path_str == ":memory:":
+        return None
+
+    db_path = Path(db_path_str).resolve()
+    if not db_path.exists() or not db_path.is_file():
+        return None
+
+    backup_dir = db_path.parent / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    backup_path = backup_dir / f"{db_path.stem}_backup_{timestamp}.db"
+
+    try:
+        shutil.copy2(db_path, backup_path)
+    except OSError:
+        return None
+
+    # Rotate old backups: keep latest 10
+    try:
+        backups = sorted(
+            backup_dir.glob(f"{db_path.stem}_backup_*.db"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for old in backups[10:]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+    return str(backup_path)
+

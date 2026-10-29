@@ -1,17 +1,22 @@
 import json
 import logging
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, status
-from fastapi.responses import HTMLResponse, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response, status
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.auth import is_authenticated_request
 from app.database import (
     add_item_to_db,
     add_note_to_db,
+    backup_database_before_bulk,
+    batch_add_items_to_db,
     complete_analysis_run,
     delete_item_from_db,
     delete_note_from_db,
@@ -27,6 +32,7 @@ from app.database import (
     update_note_in_db,
 )
 from app.organizer import analyze_inbox_with_openai, validate_analysis_result
+from app.rate_limit import enforce_analyze_rate_limit
 from app.schemas import (
     InboxItem,
     InboxItemCreate,
@@ -42,7 +48,7 @@ from app.schemas import (
 
 
 APP_DIR = Path(__file__).resolve().parent
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("life_inbox")
 
 app = FastAPI(title="Life Inbox")
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
@@ -50,8 +56,82 @@ app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 init_db()
 
 
+@app.middleware("http")
+async def security_and_logging_middleware(request: Request, call_next):
+    request_id = str(uuid.uuid4())[:8]
+    request.state.request_id = request_id
+    start_time = time.perf_counter()
+    path = request.url.path
+
+    # Single-user token authentication on all /api/* routes except /api/health
+    if path.startswith("/api/") and path != "/api/health":
+        if not is_authenticated_request(request):
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            logger.warning(
+                "auth_failed method=%s path=%s duration_ms=%.2f request_id=%s",
+                request.method,
+                path,
+                duration_ms,
+                request_id,
+            )
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "detail": "Unauthorized: invalid or missing API token",
+                    "request_id": request_id,
+                },
+                headers={
+                    "WWW-Authenticate": "Bearer",
+                    "X-Request-ID": request_id,
+                },
+            )
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        logger.exception(
+            "unhandled_server_error method=%s path=%s duration_ms=%.2f request_id=%s error=%s",
+            request.method,
+            path,
+            duration_ms,
+            request_id,
+            str(exc),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "Internal server error. Please try again later.",
+                "request_id": request_id,
+            },
+            headers={"X-Request-ID": request_id},
+        )
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+
+    logger.info(
+        "http_request method=%s path=%s status=%d duration_ms=%.2f request_id=%s",
+        request.method,
+        path,
+        response.status_code,
+        duration_ms,
+        request_id,
+    )
+    return response
+
+
+MAX_IMPORT_NOTES = 100
+MAX_NOTE_LENGTH = 10000
+
+
 class BatchImportPayload(BaseModel):
-    notes: List[str] = Field(..., min_length=1)
+    notes: List[str] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_IMPORT_NOTES,
+        description=f"List of note strings to import (1-{MAX_IMPORT_NOTES})",
+    )
 
 
 @app.get("/api/health")
@@ -162,13 +242,40 @@ def export_inbox(format: str = Query("markdown", pattern="^(markdown|json)$")):
 
 
 @app.post("/api/import")
-def import_inbox(payload: BatchImportPayload):
+def import_inbox(request: Request, payload: BatchImportPayload):
+    cl = request.headers.get("content-length")
+    if cl:
+        try:
+            if int(cl) > 1_048_576:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Import payload exceeds maximum size limit of 1MB.",
+                )
+        except ValueError:
+            pass
+
+    cleaned_notes = []
+    for idx, text in enumerate(payload.notes):
+        if len(text) > MAX_NOTE_LENGTH:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Note at index {idx} exceeds maximum length of {MAX_NOTE_LENGTH} characters.",
+            )
+        cleaned = text.strip()
+        if cleaned:
+            cleaned_notes.append(cleaned)
+
+    if not cleaned_notes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Import payload contains no valid, non-empty notes.",
+        )
+
+    # Automatic backup before bulk write
+    backup_database_before_bulk()
+
     try:
-        imported = []
-        for text in payload.notes:
-            cleaned = text.strip()
-            if cleaned:
-                imported.append(add_item_to_db(cleaned))
+        imported = batch_add_items_to_db(cleaned_notes)
         return {"imported_count": len(imported), "items": imported}
     except Exception as exc:
         logger.exception("Failed to import notes")
@@ -376,7 +483,8 @@ def get_latest_analysis():
 
 
 @app.post("/api/analyze", response_model=PersistedAnalysis)
-def analyze_inbox():
+def analyze_inbox(request: Request):
+    enforce_analyze_rate_limit(request)
     run_id = None
     try:
         run_id = start_analysis_run()
@@ -384,6 +492,8 @@ def analyze_inbox():
         raw_result = analyze_inbox_with_openai(notes)
         result = validate_analysis_result(raw_result, notes)
         return complete_analysis_run(run_id, result)
+    except HTTPException:
+        raise
     except Exception as exc:
         if run_id is not None:
             try:
