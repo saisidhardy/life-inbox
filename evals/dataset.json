@@ -1,0 +1,347 @@
+[
+  {
+    "id": "eval_01",
+    "type": "meeting",
+    "raw_text": "Meeting with Sarah & Mark about Q4 roadmap. We agreed to prioritize the mobile redesign. Need to send updated pitch deck to Alex by Friday. Mark will review analytics next week.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Send updated pitch deck to Alex", "priority": "High", "due_date": "Friday"},
+        {"title": "Review analytics next week", "priority": "Medium", "due_date": "next week"}
+      ],
+      "suggested_tags": ["#work", "#roadmap"]
+    }
+  },
+  {
+    "id": "eval_02",
+    "type": "voice_memo",
+    "raw_text": "um hey quick reminder to like call Dave back tomorrow morning before 10 about the contractor quote its super urgent",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Call Dave back about contractor quote", "priority": "High", "due_date": "tomorrow"}
+      ],
+      "suggested_tags": ["#work", "#urgent"]
+    }
+  },
+  {
+    "id": "eval_03",
+    "type": "shopping",
+    "raw_text": "Groceries to pick up: - [ ] oat milk - [ ] sourdough bread - [ ] avocados - [x] organic coffee beans - [ ] eggs",
+    "expected": {
+      "category": "Shopping",
+      "tasks": [
+        {"title": "Pick up oat milk", "priority": "Medium", "due_date": null},
+        {"title": "Pick up sourdough bread", "priority": "Medium", "due_date": null},
+        {"title": "Pick up avocados", "priority": "Medium", "due_date": null},
+        {"title": "Pick up eggs", "priority": "Medium", "due_date": null}
+      ],
+      "suggested_tags": ["#shopping", "#groceries"]
+    }
+  },
+  {
+    "id": "eval_04",
+    "type": "idea",
+    "raw_text": "💡 Idea: Micro-SaaS that monitors Stripe webhooks and sends WhatsApp alerts for failed enterprise payments. Could charge $29/mo.",
+    "expected": {
+      "category": "Ideas",
+      "tasks": [],
+      "suggested_tags": ["#ideas", "#saas"]
+    }
+  },
+  {
+    "id": "eval_05",
+    "type": "finance",
+    "raw_text": "Q3 quarterly tax estimated payment is due on September 15. Must log into IRS EFTPS and pay $3,200. Important!",
+    "expected": {
+      "category": "Finance",
+      "tasks": [
+        {"title": "Pay estimated quarterly tax via IRS EFTPS", "priority": "High", "due_date": "September 15"}
+      ],
+      "suggested_tags": ["#finance", "#tax"]
+    }
+  },
+  {
+    "id": "eval_06",
+    "type": "health",
+    "raw_text": "Schedule annual dental cleaning with Dr. Harris. Recommended to get wisdom teeth x-ray done before November.",
+    "expected": {
+      "category": "Health",
+      "tasks": [
+        {"title": "Schedule annual dental cleaning with Dr. Harris", "priority": "Medium", "due_date": null},
+        {"title": "Get wisdom teeth x-ray done", "priority": "Low", "due_date": "November"}
+      ],
+      "suggested_tags": ["#health", "#dentist"]
+    }
+  },
+  {
+    "id": "eval_07",
+    "type": "outage",
+    "raw_text": "CRITICAL: Production API latency spike on /api/analyze. Need to check Redis cache hit rate and restart worker instances immediately.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Check Redis cache hit rate", "priority": "High", "due_date": "immediately"},
+        {"title": "Restart worker instances", "priority": "High", "due_date": "immediately"}
+      ],
+      "suggested_tags": ["#work", "#urgent"]
+    }
+  },
+  {
+    "id": "eval_08",
+    "type": "personal",
+    "raw_text": "Mom's birthday is on Oct 24! Buy gardening gloves and send flowers two days before.",
+    "expected": {
+      "category": "Personal",
+      "tasks": [
+        {"title": "Buy gardening gloves for Mom", "priority": "Medium", "due_date": "Oct 22"},
+        {"title": "Send flowers for Mom's birthday", "priority": "Medium", "due_date": "Oct 22"}
+      ],
+      "suggested_tags": ["#personal"]
+    }
+  },
+  {
+    "id": "eval_09",
+    "type": "fragment",
+    "raw_text": "Dentist appointment 3pm",
+    "expected": {
+      "category": "Health",
+      "tasks": [
+        {"title": "Dentist appointment", "priority": "Medium", "due_date": "today"}
+      ],
+      "suggested_tags": ["#health"]
+    }
+  },
+  {
+    "id": "eval_10",
+    "type": "idea",
+    "raw_text": "Brainstorming AI interview prep tool for product managers. Key features: voice back-and-forth, rubric scoring, instant transcript feedback.",
+    "expected": {
+      "category": "Ideas",
+      "tasks": [],
+      "suggested_tags": ["#ideas", "#ai"]
+    }
+  },
+  {
+    "id": "eval_11",
+    "type": "finance",
+    "raw_text": "Cancel Adobe Creative Cloud trial before renewal on Friday. Check bank statement for unexpected duplicate charges.",
+    "expected": {
+      "category": "Finance",
+      "tasks": [
+        {"title": "Cancel Adobe Creative Cloud trial", "priority": "High", "due_date": "Friday"},
+        {"title": "Check bank statement for duplicate charges", "priority": "Medium", "due_date": null}
+      ],
+      "suggested_tags": ["#finance"]
+    }
+  },
+  {
+    "id": "eval_12",
+    "type": "meeting",
+    "raw_text": "1:1 with Jason: He mentioned wanting to take AWS Solutions Architect exam. I should approve his learning stipend by end of day.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Approve Jason's learning stipend", "priority": "High", "due_date": "today"}
+      ],
+      "suggested_tags": ["#work", "#management"]
+    }
+  },
+  {
+    "id": "eval_13",
+    "type": "checklist",
+    "raw_text": "Pre-flight packing list: - [ ] Passport & boarding pass - [ ] Universal power adapter - [ ] Noise cancelling headphones - [ ] Kindle charger",
+    "expected": {
+      "category": "Personal",
+      "tasks": [
+        {"title": "Pack passport and boarding pass", "priority": "High", "due_date": null},
+        {"title": "Pack universal power adapter", "priority": "Medium", "due_date": null},
+        {"title": "Pack noise cancelling headphones", "priority": "Medium", "due_date": null},
+        {"title": "Pack Kindle charger", "priority": "Low", "due_date": null}
+      ],
+      "suggested_tags": ["#personal", "#travel"]
+    }
+  },
+  {
+    "id": "eval_14",
+    "type": "shopping",
+    "raw_text": "Hardware store run: 2-inch wood screws, sandpaper grit 120, painter's tape, cordless drill bits.",
+    "expected": {
+      "category": "Shopping",
+      "tasks": [
+        {"title": "Buy 2-inch wood screws", "priority": "Medium", "due_date": null},
+        {"title": "Buy sandpaper grit 120", "priority": "Medium", "due_date": null},
+        {"title": "Buy painter's tape", "priority": "Medium", "due_date": null},
+        {"title": "Buy cordless drill bits", "priority": "Medium", "due_date": null}
+      ],
+      "suggested_tags": ["#shopping"]
+    }
+  },
+  {
+    "id": "eval_15",
+    "type": "code_snippet",
+    "raw_text": "FastAPI bug: Database session leak in async endpoint. Fix with `with SessionLocal() as session:` block. Review pull request #42 tomorrow morning.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Review pull request #42 for session leak fix", "priority": "High", "due_date": "tomorrow"}
+      ],
+      "suggested_tags": ["#work", "#engineering"]
+    }
+  },
+  {
+    "id": "eval_16",
+    "type": "health",
+    "raw_text": "Hydration goal: Drink 3L water daily. Go for a 30-minute run at 6pm today. Pick up allergy medication from CVS.",
+    "expected": {
+      "category": "Health",
+      "tasks": [
+        {"title": "Go for a 30-minute run", "priority": "Medium", "due_date": "today"},
+        {"title": "Pick up allergy medication from CVS", "priority": "High", "due_date": "today"}
+      ],
+      "suggested_tags": ["#health", "#fitness"]
+    }
+  },
+  {
+    "id": "eval_17",
+    "type": "personal",
+    "raw_text": "Book recommendation from Elena: 'Thinking in Systems' by Donella Meadows. Order paperback copy online.",
+    "expected": {
+      "category": "Personal",
+      "tasks": [
+        {"title": "Order paperback copy of Thinking in Systems", "priority": "Low", "due_date": null}
+      ],
+      "suggested_tags": ["#personal", "#books"]
+    }
+  },
+  {
+    "id": "eval_18",
+    "type": "voice_memo",
+    "raw_text": "remind me to clean the gutters this weekend before it starts raining on Sunday also check the smoke detectors batteries",
+    "expected": {
+      "category": "Personal",
+      "tasks": [
+        {"title": "Clean the gutters", "priority": "Medium", "due_date": "weekend"},
+        {"title": "Check smoke detector batteries", "priority": "Medium", "due_date": "weekend"}
+      ],
+      "suggested_tags": ["#personal", "#home"]
+    }
+  },
+  {
+    "id": "eval_19",
+    "type": "work",
+    "raw_text": "Prepare executive briefing slide on AI token unit economics for Friday's leadership meeting. Highlight savings from prompt caching.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Prepare executive briefing slide on AI token unit economics", "priority": "High", "due_date": "Friday"}
+      ],
+      "suggested_tags": ["#work", "#ai"]
+    }
+  },
+  {
+    "id": "eval_20",
+    "type": "finance",
+    "raw_text": "Send invoice #1042 to Acme Corp for backend integration consulting work. Payment terms Net 30.",
+    "expected": {
+      "category": "Finance",
+      "tasks": [
+        {"title": "Send invoice #1042 to Acme Corp", "priority": "High", "due_date": null}
+      ],
+      "suggested_tags": ["#finance", "#invoice"]
+    }
+  },
+  {
+    "id": "eval_21",
+    "type": "idea",
+    "raw_text": "Product hypothesis: Notes apps fail because users spend too much cognitive effort organizing. Autonomous periodic organization provides better retention than upfront filing.",
+    "expected": {
+      "category": "Ideas",
+      "tasks": [],
+      "suggested_tags": ["#ideas", "#product"]
+    }
+  },
+  {
+    "id": "eval_22",
+    "type": "work",
+    "raw_text": "Set up staging database replica on Render with persistent disk. Verify Alembic migration scripts run cleanly from head.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Set up staging database replica on Render", "priority": "Medium", "due_date": null},
+        {"title": "Verify Alembic migration scripts run cleanly", "priority": "Medium", "due_date": null}
+      ],
+      "suggested_tags": ["#work", "#devops"]
+    }
+  },
+  {
+    "id": "eval_23",
+    "type": "health",
+    "raw_text": "Log resting heart rate: 62 bpm. Track sleep score: 84%. Schedule physical therapy follow-up next Tuesday.",
+    "expected": {
+      "category": "Health",
+      "tasks": [
+        {"title": "Schedule physical therapy follow-up", "priority": "Medium", "due_date": "next Tuesday"}
+      ],
+      "suggested_tags": ["#health"]
+    }
+  },
+  {
+    "id": "eval_24",
+    "type": "shopping",
+    "raw_text": "Gift ideas for Priya's housewarming: French press, olive oil sampler, or linen kitchen towels. Buy by Saturday.",
+    "expected": {
+      "category": "Shopping",
+      "tasks": [
+        {"title": "Buy housewarming gift for Priya", "priority": "High", "due_date": "Saturday"}
+      ],
+      "suggested_tags": ["#shopping", "#gift"]
+    }
+  },
+  {
+    "id": "eval_25",
+    "type": "edge_case_empty_meaning",
+    "raw_text": "just thinking about things...",
+    "expected": {
+      "category": "Personal",
+      "tasks": [],
+      "suggested_tags": ["#personal"]
+    }
+  },
+  {
+    "id": "eval_26",
+    "type": "edge_case_mixed_language",
+    "raw_text": "Meeting avec l'équipe de Paris à 14h. Review contract clauses #work",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Review contract clauses with Paris team", "priority": "Medium", "due_date": null}
+      ],
+      "suggested_tags": ["#work"]
+    }
+  },
+  {
+    "id": "eval_27",
+    "type": "work",
+    "raw_text": "Security audit action item: Rotate all production database credentials and API secrets. Must complete before Monday deployment.",
+    "expected": {
+      "category": "Work",
+      "tasks": [
+        {"title": "Rotate production database credentials and API secrets", "priority": "High", "due_date": "Monday"}
+      ],
+      "suggested_tags": ["#work", "#security"]
+    }
+  },
+  {
+    "id": "eval_28",
+    "type": "finance",
+    "raw_text": "Annual home insurance renewal premium is $1,150. Compare quotes from Geico and State Farm before renewal on Nov 1.",
+    "expected": {
+      "category": "Finance",
+      "tasks": [
+        {"title": "Compare home insurance quotes from Geico and State Farm", "priority": "Medium", "due_date": "Nov 1"}
+      ],
+      "suggested_tags": ["#finance", "#insurance"]
+    }
+  }
+]

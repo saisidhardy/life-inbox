@@ -40,10 +40,13 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short
 
+      - name: Run AI evaluations (Mock Provider)
+        run: python -m evals.run --provider mock --output evals/ci_results.json
+
       - name: Run linting
         run: |
           pip install ruff
-          ruff check app/ tests/ scripts/
+          ruff check app/ tests/ scripts/ evals/
 
   docker:
     runs-on: ubuntu-latest

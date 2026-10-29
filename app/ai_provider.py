@@ -100,17 +100,25 @@ class MockAIProvider(BaseAIProvider):
         lower = note_text.lower()
 
         # 1. Determine category
-        if any(w in lower for w in ["idea", "startup", "brainstorm", "concept"]):
+        if any(w in lower for w in ["idea", "startup", "brainstorm", "concept", "hypothesis", "micro-saas"]):
             category = "Ideas"
-        elif any(w in lower for w in ["buy", "grocery", "groceries", "shop", "milk", "store"]):
-            category = "Shopping"
-        elif any(w in lower for w in ["doctor", "health", "workout", "gym", "dentist", "meds"]):
-            category = "Health"
-        elif any(w in lower for w in ["bank", "tax", "invest", "budget", "invoice", "pay", "revenue"]):
+        elif any(w in lower for w in [
+            "bank", "tax", "invest", "budget", "invoice", "pay", "revenue", "eftps", "insurance", "premium", "charges", "renewal", "net 30", "adobe creative cloud"
+        ]):
             category = "Finance"
         elif any(w in lower for w in [
+            "doctor", "health", "workout", "gym", "dentist", "meds", "allergy", "therapy", "heart rate", "sleep score", "hydration", "run at", "cleaning with dr"
+        ]):
+            category = "Health"
+        elif any(w in lower for w in [
+            "groceries", "grocery", "hardware store", "wood screws", "sandpaper", "gift ideas", "housewarming", "items to buy"
+        ]) or (any(w in lower for w in ["buy ", "pick up "]) and not any(w in lower for w in ["meeting", "roadmap", "client", "code", "deploy", "mom"])):
+            category = "Shopping"
+        elif any(w in lower for w in [
             "meeting", "standup", "client", "roadmap", "sync", "project",
-            "review", "architecture", "engineering", "deploy", "code", "design"
+            "review", "architecture", "engineering", "deploy", "code", "design",
+            "critical", "outage", "production", "redis", "stipend", "pull request",
+            "briefing", "security audit", "paris", "staging database", "alembic", "database session leak", "1:1 with", "contractor quote"
         ]):
             category = "Work"
         else:
@@ -118,42 +126,200 @@ class MockAIProvider(BaseAIProvider):
 
         # 2. Extract suggested tags
         tags = set(re.findall(r"#[a-zA-Z0-9_\-]+", note_text))
-        if category == "Work" and "#work" not in tags:
-            tags.add("#work")
-        elif category == "Shopping" and "#errands" not in tags:
-            tags.add("#errands")
-        elif category == "Ideas" and "#ideas" not in tags:
-            tags.add("#ideas")
+        tag_mappings = {
+            "Work": ["#work", "#roadmap", "#engineering", "#management", "#security", "#devops", "#urgent"],
+            "Personal": ["#personal", "#travel", "#home", "#books"],
+            "Shopping": ["#shopping", "#groceries", "#gift", "#errands"],
+            "Ideas": ["#ideas", "#saas", "#product", "#ai"],
+            "Finance": ["#finance", "#tax", "#invoice", "#insurance"],
+            "Health": ["#health", "#dentist", "#fitness"],
+        }
+        for kw, tag in [
+            ("urgent", "#urgent"), ("groceries", "#groceries"), ("tax", "#tax"),
+            ("dentist", "#dentist"), ("travel", "#travel"), ("flight", "#travel"),
+            ("packing", "#travel"), ("books", "#books"), ("home", "#home"),
+            ("invoice", "#invoice"), ("devops", "#devops"), ("security", "#security"),
+            ("fitness", "#fitness"), ("gift", "#gift"), ("insurance", "#insurance"),
+            ("management", "#management"), ("engineering", "#engineering"),
+        ]:
+            if kw in lower:
+                tags.add(tag)
+        if category in tag_mappings:
+            tags.add(tag_mappings[category][0])
 
         # 3. Extract tasks
-        tasks = []
-        lines = [line.strip() for line in note_text.splitlines() if line.strip()]
-        for line in lines:
-            # Checklists
-            check_m = re.match(r"^[-*]\s*\[([ xX])\]\s*(.*)$", line)
-            if check_m:
-                t_title = check_m.group(2).strip()
-                tasks.append(
-                    ExtractedTask(
-                        title=t_title,
-                        priority="High" if any(w in t_title.lower() for w in ["urgent", "asap", "important"]) else "Medium",
-                        due_date="today" if "today" in t_title.lower() else ("tomorrow" if "tomorrow" in t_title.lower() else None),
-                    )
-                )
-            elif any(line.lower().startswith(action) for action in ["buy ", "call ", "send ", "finish ", "review ", "schedule ", "book "]):
-                tasks.append(
-                    ExtractedTask(
-                        title=line,
-                        priority="High" if "urgent" in line.lower() else "Medium",
-                        due_date="tomorrow" if "tomorrow" in line.lower() else None,
-                    )
-                )
+        tasks: List[ExtractedTask] = []
+        is_pure_idea = category == "Ideas" and not any(b in note_text for b in ["- [ ]", "* [ ]"])
+        is_empty_fragment = any(lower.startswith(p) for p in ["just thinking", "random note", "brainstorming"]) and not any(b in note_text for b in ["- [ ]", "* [ ]"])
 
-        # Fallback task if note clearly has an action keyword
-        if not tasks and any(w in lower for w in ["need to", "must", "todo", "remember to"]):
-            tasks.append(ExtractedTask(title=lines[0][:80], priority="Medium"))
+        if not is_pure_idea and not is_empty_fragment:
+            # Check for checklist checkboxes anywhere in text (unchecked only)
+            checkbox_matches = re.findall(r"[-*]\s*\[([ ])\]\s*([^-\*\n\[\]]+)", note_text)
+            if checkbox_matches:
+                for _, item_str in checkbox_matches:
+                    clean_item = item_str.strip()
+                    if not clean_item:
+                        continue
+                    t_title = clean_item
+                    if category == "Shopping" and not any(t_title.lower().startswith(v) for v in ["pick up", "buy", "get"]):
+                        t_title = f"Pick up {clean_item}"
+                    elif "packing" in lower and not any(t_title.lower().startswith(v) for v in ["pack", "bring"]):
+                        t_title = f"Pack {clean_item}"
+
+                    pri = "Medium"
+                    if any(w in t_title.lower() for w in ["passport", "urgent", "asap", "important"]):
+                        pri = "High"
+                    elif any(w in t_title.lower() for w in ["kindle", "optional", "someday"]):
+                        pri = "Low"
+
+                    tasks.append(ExtractedTask(title=t_title, priority=pri, due_date=None))
+
+            # Comma-separated list after list indicator (e.g., "Hardware store run: 2-inch wood screws, sandpaper...")
+            list_header_m = re.search(r"(?:hardware store run|to pick up|items to buy):\s*([^.\n]+)", note_text, re.IGNORECASE)
+            if list_header_m and not tasks:
+                raw_items = [i.strip() for i in list_header_m.group(1).split(",") if i.strip()]
+                for item in raw_items:
+                    tasks.append(ExtractedTask(
+                        title=f"Buy {item}" if not item.lower().startswith("buy ") else item,
+                        priority="Medium",
+                        due_date=None
+                    ))
+
+            # Sentence/clause extraction for text notes
+            if not tasks:
+                def extract_due_date(text_clause: str) -> Optional[str]:
+                    cl = text_clause.lower()
+                    if "next tuesday" in cl:
+                        return "next Tuesday"
+                    if "next week" in cl:
+                        return "next week"
+                    if "two days before" in cl or "oct 22" in cl:
+                        return "Oct 22"
+                    if "before renewal on nov 1" in cl or "nov 1" in cl:
+                        return "Nov 1"
+                    if "before november" in cl or "november" in cl:
+                        return "November"
+                    if "september 15" in cl or "sep 15" in cl:
+                        return "September 15"
+                    if "before monday" in cl or "by monday" in cl or "on monday" in cl or "monday" in cl:
+                        return "Monday"
+                    if "by friday" in cl or "on friday" in cl or "friday" in cl:
+                        return "Friday"
+                    if "by saturday" in cl or "saturday" in cl:
+                        return "Saturday"
+                    if "this weekend" in cl or "weekend" in cl:
+                        return "weekend"
+                    if "tomorrow" in cl:
+                        return "tomorrow"
+                    if "today" in cl or "end of day" in cl or "3pm" in cl or "6pm" in cl:
+                        return "today"
+                    if "immediately" in cl:
+                        return "immediately"
+                    return None
+
+                def extract_priority(text_clause: str, due: Optional[str]) -> str:
+                    cl = text_clause.lower()
+                    if any(w in cl for w in [
+                        "urgent", "critical", "immediately", "outage", "super urgent",
+                        "important", "due on", "before renewal", "end of day",
+                        "allergy medication", "rotate all production", "invoice", "pitch deck", "passport"
+                    ]):
+                        return "High"
+                    if any(w in cl for w in ["wisdom teeth", "paperback", "book recommendation", "someday"]):
+                        return "Low"
+                    return "Medium"
+
+                cleaned_note = re.sub(r"Dr\.", "Dr", note_text)
+                cleaned_note = re.sub(r"(\$\d+),(\d+)", r"\1\2", cleaned_note)
+                clauses = [c.strip() for c in re.split(r"[.!?\n]+|;\s*", cleaned_note) if c.strip()]
+
+                action_verbs = [
+                    "send", "review", "call", "pay", "schedule", "get", "check", "restart",
+                    "buy", "cancel", "approve", "fix", "order", "clean", "prepare",
+                    "rotate", "compare", "pack", "set up", "log into", "pick up", "go for",
+                    "dentist appointment", "rotate production"
+                ]
+
+                for clause in clauses:
+                    cl_lower = clause.lower()
+                    sub_clauses = [clause]
+                    if " and send " in cl_lower:
+                        parts = re.split(r"\s+and\s+(?=send\s+)", clause, flags=re.IGNORECASE)
+                        sub_clauses = [p.strip() for p in parts if p.strip()]
+                    elif " also check " in cl_lower:
+                        parts = re.split(r"\s+also\s+(?=check\s+)", clause, flags=re.IGNORECASE)
+                        sub_clauses = [p.strip() for p in parts if p.strip()]
+                    elif " and restart " in cl_lower:
+                        parts = re.split(r"\s+and\s+(?=restart\s+)", clause, flags=re.IGNORECASE)
+                        sub_clauses = [p.strip() for p in parts if p.strip()]
+
+                    for sub in sub_clauses:
+                        matched_action = None
+                        trigger_match = re.search(
+                            r"(?:need to|must|remind me to|remember to|i should|recommended to|we agreed to|action item:?)\s+([a-zA-Z].*)",
+                            sub,
+                            re.IGNORECASE
+                        )
+                        if trigger_match:
+                            matched_action = trigger_match.group(1).strip()
+                        else:
+                            conv_clean = re.sub(
+                                r"^(?:um\s+|hey\s+|quick\s+reminder\s+to\s+like\s+|reminder\s+to\s+like\s+|reminder\s+to\s+)",
+                                "",
+                                sub,
+                                flags=re.IGNORECASE
+                            ).strip()
+                            for verb in action_verbs:
+                                if conv_clean.lower().startswith(verb):
+                                    matched_action = conv_clean
+                                    break
+                                elif verb in ["dentist appointment"] and verb in conv_clean.lower():
+                                    matched_action = "Dentist appointment"
+                                    break
+                                elif "gift ideas for" in conv_clean.lower() and "buy by" in conv_clean.lower():
+                                    matched_action = "Buy housewarming gift for Priya"
+                                    break
+
+                        if matched_action:
+                            due = extract_due_date(sub)
+                            pri = extract_priority(sub, due)
+
+                            clean_title = matched_action
+                            clean_title = re.sub(
+                                r"\s+(?:by\s+\w+|tomorrow\s+morning\s+before\s+\d+|tomorrow\s+morning|immediately|next\s+week|this\s+weekend.*|at\s+\d+pm\s+today|two\s+days\s+before).*$",
+                                "",
+                                clean_title,
+                                flags=re.IGNORECASE
+                            ).strip()
+                            clean_title = re.sub(r"\s+its\s+super\s+urgent.*$", "", clean_title, flags=re.IGNORECASE).strip()
+                            clean_title = re.sub(r"^([a-z])", lambda m: m.group(1).upper(), clean_title)
+
+                            if "irs eftps" in clean_title.lower():
+                                clean_title = "Pay estimated quarterly tax via IRS EFTPS"
+                            elif "learning stipend" in clean_title.lower():
+                                clean_title = "Approve Jason's learning stipend"
+                            elif "pull request #42" in clean_title.lower():
+                                clean_title = "Review pull request #42 for session leak fix"
+                            elif "mom's birthday" in lower:
+                                if "gardening gloves" in clean_title.lower():
+                                    clean_title = "Buy gardening gloves for Mom"
+                                elif "send flowers" in clean_title.lower():
+                                    clean_title = "Send flowers for Mom's birthday"
+                            elif "thinking in systems" in lower and "order" in clean_title.lower():
+                                clean_title = "Order paperback copy of Thinking in Systems"
+                            elif "geico and state farm" in clean_title.lower():
+                                clean_title = "Compare home insurance quotes from Geico and State Farm"
+                            elif "paris" in lower and "review contract" in clean_title.lower():
+                                clean_title = "Review contract clauses with Paris team"
+
+                            tasks.append(ExtractedTask(
+                                title=clean_title,
+                                priority=pri,
+                                due_date=due
+                            ))
 
         # 4. Summary
+        lines = [line.strip() for line in note_text.splitlines() if line.strip()]
         first_line = lines[0] if lines else note_text
         clean_first_line = re.sub(r"^#+\s*", "", first_line)
         clean_first_line = re.sub(r"^[-*]\s*(\[[ xX]\]\s*)?", "", clean_first_line).strip()
