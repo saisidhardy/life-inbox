@@ -82,6 +82,16 @@ class BaseAIProvider(ABC):
         """Generate an executive summary and suggested focus areas."""
         pass
 
+    @abstractmethod
+    def decompose_task(self, task_text: str, context: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Decompose a task into 3-5 structured subtasks with estimated minutes and priority."""
+        pass
+
+    @abstractmethod
+    def enhance_note(self, note_text: str) -> Dict[str, Any]:
+        """Structure a raw note into TLDR, key points, action items, and open questions."""
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Mock AI Provider (Deterministic, Offline, 0 Cost)
@@ -428,6 +438,113 @@ class MockAIProvider(BaseAIProvider):
             "suggested_focus": focus,
         }
 
+    def decompose_task(self, task_text: str, context: Optional[str] = None) -> List[Dict[str, Any]]:
+        start_time = time.perf_counter()
+        lower = task_text.lower()
+        subtasks = []
+
+        if any(w in lower for w in ["deck", "presentation", "slides"]):
+            subtasks = [
+                {"title": "Gather latest metrics and user progress numbers", "estimated_minutes": 25, "priority": "High"},
+                {"title": "Update narrative slides with milestone goals", "estimated_minutes": 40, "priority": "High"},
+                {"title": "Review layout and export presentation PDF", "estimated_minutes": 15, "priority": "Medium"},
+                {"title": "Send finalized deck to stakeholders", "estimated_minutes": 10, "priority": "Medium"},
+            ]
+        elif any(w in lower for w in ["tax", "pay", "invoice", "bank", "bill"]):
+            subtasks = [
+                {"title": "Gather receipts and verify calculations", "estimated_minutes": 20, "priority": "Medium"},
+                {"title": f"Log into payment portal and submit {task_text[:28]}", "estimated_minutes": 15, "priority": "High"},
+                {"title": "Save official confirmation receipt to records", "estimated_minutes": 10, "priority": "High"},
+            ]
+        elif any(w in lower for w in ["dental", "doctor", "appointment", "health"]):
+            subtasks = [
+                {"title": "Confirm appointment time and doctor availability", "estimated_minutes": 10, "priority": "High"},
+                {"title": "Review pre-visit instructions or medical forms", "estimated_minutes": 15, "priority": "Medium"},
+                {"title": "Add calendar event with reminder notifications", "estimated_minutes": 5, "priority": "Medium"},
+            ]
+        elif any(w in lower for w in ["buy", "store", "hardware", "groceries", "shop"]):
+            subtasks = [
+                {"title": "Compile full checklist of items needed", "estimated_minutes": 10, "priority": "Medium"},
+                {"title": "Check store hours and inventory availability", "estimated_minutes": 10, "priority": "Medium"},
+                {"title": "Pick up items and inspect quality", "estimated_minutes": 35, "priority": "High"},
+            ]
+        elif any(w in lower for w in ["docker", "deploy", "database", "api", "code", "bug"]):
+            subtasks = [
+                {"title": "Reproduce issue or review architecture specs", "estimated_minutes": 20, "priority": "High"},
+                {"title": "Implement changes in branch and run test suite", "estimated_minutes": 45, "priority": "High"},
+                {"title": "Create pull request and request peer review", "estimated_minutes": 15, "priority": "Medium"},
+                {"title": "Deploy to production and monitor health check", "estimated_minutes": 20, "priority": "High"},
+            ]
+        else:
+            clean_title = task_text[:60]
+            subtasks = [
+                {"title": f"Clarify scope and prerequisites for '{clean_title}'", "estimated_minutes": 15, "priority": "Medium"},
+                {"title": f"Execute primary milestone for: {clean_title}", "estimated_minutes": 45, "priority": "High"},
+                {"title": "Review output against quality requirements", "estimated_minutes": 20, "priority": "Medium"},
+                {"title": "Mark complete and document next steps", "estimated_minutes": 10, "priority": "Low"},
+            ]
+
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+        prompt_tokens = max(15, len(task_text.split()) * 2)
+        completion_tokens = 60
+
+        db.record_ai_metric(
+            operation="decompose_task",
+            provider=self.provider_name,
+            model=self.model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            latency_ms=latency_ms,
+            estimated_cost_usd=0.0,
+            status="success",
+        )
+        return subtasks
+
+    def enhance_note(self, note_text: str) -> Dict[str, Any]:
+        start_time = time.perf_counter()
+        analysis = self.auto_process_note(note_text)
+
+        # Split sentences for key points
+        sentences = [s.strip() for s in re.split(r"[.!?\n]+", note_text) if len(s.strip()) > 8]
+        key_points = sentences[:3] if sentences else ["Note content recorded."]
+
+        # Open questions heuristic
+        open_questions = []
+        lower = note_text.lower()
+        if not any(w in lower for w in ["friday", "monday", "tomorrow", "today", "nov", "sep"]):
+            open_questions.append("What is the targeted completion deadline?")
+        if not any(w in lower for w in ["$", "cost", "budget", "price", "fee"]):
+            open_questions.append("Are there any budget or resource constraints to consider?")
+        if not open_questions:
+            open_questions.append("Who is the primary owner responsible for closing next actions?")
+
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+        prompt_tokens = max(20, len(note_text.split()) * 2)
+        completion_tokens = 80
+
+        db.record_ai_metric(
+            operation="enhance_note",
+            provider=self.provider_name,
+            model=self.model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            latency_ms=latency_ms,
+            estimated_cost_usd=0.0,
+            status="success",
+        )
+
+        return {
+            "tldr": analysis.summary or (sentences[0] if sentences else "Note recorded."),
+            "key_points": key_points,
+            "action_items": [
+                {"title": t.title, "priority": t.priority, "due_date": t.due_date}
+                for t in analysis.extracted_tasks
+            ],
+            "open_questions": open_questions,
+        }
+
 
 # ---------------------------------------------------------------------------
 # OpenAI Provider (Real LLM, Retries, Cost Calculation)
@@ -652,6 +769,64 @@ class OpenAIProvider(BaseAIProvider):
             return res.parsed
 
         return self._fallback.generate_weekly_digest(open_tasks, stale_items, top_themes)
+
+    def decompose_task(self, task_text: str, context: Optional[str] = None) -> List[Dict[str, Any]]:
+        prompt = (
+            f"Decompose the following task into 3-5 concrete, actionable subtasks.\n"
+            f"Task: {task_text}\n"
+            f"Optional context: {context or 'None'}\n\n"
+            f"Return JSON format:\n"
+            f"{{\"subtasks\": [{{\"title\": \"imperative action verb string\", \"estimated_minutes\": 15-60, \"priority\": \"High|Medium|Low\"}}]}}"
+        )
+        messages = [
+            {"role": "system", "content": "You are an expert productivity coach. Output strictly valid JSON."},
+            {"role": "user", "content": prompt},
+        ]
+        res = self._call_chat_completion(messages, response_format_json=True)
+        if res.status == "success" and res.parsed and "subtasks" in res.parsed:
+            db.record_ai_metric(
+                operation="decompose_task",
+                provider=self.provider_name,
+                model=self.model_name,
+                prompt_tokens=res.prompt_tokens,
+                completion_tokens=res.completion_tokens,
+                total_tokens=res.total_tokens,
+                latency_ms=res.latency_ms,
+                estimated_cost_usd=res.estimated_cost_usd,
+                status="success",
+            )
+            return res.parsed["subtasks"]
+        return self._fallback.decompose_task(task_text, context)
+
+    def enhance_note(self, note_text: str) -> Dict[str, Any]:
+        prompt = (
+            f"Transform this raw note into an executive, structured action plan.\n"
+            f"Note: {note_text}\n\n"
+            f"Return JSON with keys:\n"
+            f"- \"tldr\": concise one-line summary\n"
+            f"- \"key_points\": list of 2-4 key decisions or takeaways\n"
+            f"- \"action_items\": list of {{\"title\": \"...\", \"priority\": \"High|Medium|Low\", \"due_date\": \"...\" or null}}\n"
+            f"- \"open_questions\": list of 1-3 open questions or risks"
+        )
+        messages = [
+            {"role": "system", "content": "You are an executive assistant. Output strictly valid JSON."},
+            {"role": "user", "content": prompt},
+        ]
+        res = self._call_chat_completion(messages, response_format_json=True)
+        if res.status == "success" and res.parsed and "tldr" in res.parsed:
+            db.record_ai_metric(
+                operation="enhance_note",
+                provider=self.provider_name,
+                model=self.model_name,
+                prompt_tokens=res.prompt_tokens,
+                completion_tokens=res.completion_tokens,
+                total_tokens=res.total_tokens,
+                latency_ms=res.latency_ms,
+                estimated_cost_usd=res.estimated_cost_usd,
+                status="success",
+            )
+            return res.parsed
+        return self._fallback.enhance_note(note_text)
 
 
 def get_ai_provider() -> BaseAIProvider:

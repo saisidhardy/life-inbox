@@ -191,6 +191,31 @@ def add_item_to_db(raw_text: str) -> dict:
         return _item_to_dict(item)
 
 
+def add_file_item_to_db(
+    item_type: str,
+    raw_text: str,
+    title: Optional[str] = None,
+    source_url: Optional[str] = None,
+    original_filename: Optional[str] = None,
+    mime_type: Optional[str] = None,
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    with SessionLocal() as session:
+        item = InboxItemRecord(
+            item_type=item_type,
+            title=title,
+            raw_text=raw_text,
+            source_url=source_url,
+            original_filename=original_filename,
+            mime_type=mime_type,
+            processing_status=READY_STATUS,
+            created_at=now,
+        )
+        session.add(item)
+        session.commit()
+        return _item_to_dict(item)
+
+
 def list_items_from_db(
     search: Optional[str] = None,
     item_type: Optional[str] = None,
@@ -520,6 +545,54 @@ def set_task_status(task_id: int, task_status: str) -> Optional[dict]:
             task.status = task_status
             task.updated_at = datetime.now(timezone.utc).isoformat()
             session.commit()
+        return _task_to_dict(session, task)
+
+
+def get_task_by_id(task_id: int) -> Optional[dict]:
+    with SessionLocal() as session:
+        task = session.get(TaskRecord, task_id)
+        if task is None:
+            return None
+        return _task_to_dict(session, task)
+
+
+def add_custom_task_to_db(
+    text: str,
+    priority: str = "Medium",
+    timing_text: Optional[str] = None,
+    source_item_id: Optional[int] = None,
+) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    norm = " ".join(text.lower().split())
+    dedup_key = hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+    with SessionLocal() as session:
+        existing = session.scalar(select(TaskRecord).where(TaskRecord.dedup_key == dedup_key))
+        if existing:
+            return _task_to_dict(session, existing)
+
+        task = TaskRecord(
+            text=text,
+            priority=priority if priority in {"High", "Medium", "Low"} else "Medium",
+            timing_text=timing_text,
+            status=TASK_OPEN,
+            dedup_key=dedup_key,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(task)
+        session.flush()
+
+        if source_item_id:
+            existing_item_link = session.scalar(
+                select(TaskSourceItemRecord).where(
+                    TaskSourceItemRecord.item_id == source_item_id
+                )
+            )
+            if not existing_item_link:
+                session.add(TaskSourceItemRecord(task_id=task.id, item_id=source_item_id))
+
+        session.commit()
         return _task_to_dict(session, task)
 
 

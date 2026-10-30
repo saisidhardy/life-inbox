@@ -6,14 +6,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Union
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.ai_provider import get_ai_provider
 from app.auth import is_authenticated_request
 from app.database import (
+    add_custom_task_to_db,
+    add_file_item_to_db,
     add_item_to_db,
     add_note_to_db,
     backup_database_before_bulk,
@@ -25,6 +27,7 @@ from app.database import (
     get_ai_metrics_summary,
     get_latest_successful_analysis,
     get_stale_items,
+    get_task_by_id,
     init_db,
     list_items_from_db,
     list_notes_from_db,
@@ -39,8 +42,10 @@ from app.rate_limit import enforce_analyze_rate_limit
 from app.retrieval import extract_citations_from_text, retrieve_relevant_notes
 from app.schemas import (
     AIMetricsSummary,
+    ApplySubtasksRequest,
     AskInboxRequest,
     AskInboxResponse,
+    FileUploadResponse,
     InboxItem,
     InboxItemCreate,
     InboxItemText,
@@ -49,12 +54,23 @@ from app.schemas import (
     Note,
     NoteAutoAnalysis,
     NoteCreate,
+    NoteEnhancementResponse,
     NoteUpdate,
     PersistedAnalysis,
     Priority,
+    RelatedItem,
+    RelatedItemsResponse,
+    SubtaskDecomposition,
     Task,
+    TaskDecompositionResponse,
     TaskListStatus,
     WeeklyDigest,
+)
+from app.upload_extract import (
+    ALLOWED_EXTENSIONS,
+    MAX_UPLOAD_BYTES,
+    UPLOAD_DIR,
+    process_uploaded_file,
 )
 
 
@@ -297,6 +313,78 @@ def import_inbox(request: Request, payload: BatchImportPayload):
         ) from exc
 
 
+@app.post("/api/upload", response_model=FileUploadResponse)
+async def upload_file(
+    file: UploadFile = File(...),
+    auto_process: bool = Query(True),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename in upload.")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Allowed types: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Uploaded file exceeds maximum limit of {MAX_UPLOAD_BYTES // (1024 * 1024)}MB.",
+        )
+
+    try:
+        item_type, title, raw_text, stored_filename = process_uploaded_file(
+            file.filename, file.content_type or "", content
+        )
+        file_url = f"/api/uploads/{stored_filename}"
+
+        item = add_file_item_to_db(
+            item_type=item_type,
+            title=title,
+            raw_text=raw_text,
+            source_url=file_url,
+            original_filename=file.filename,
+            mime_type=file.content_type,
+        )
+
+        analysis = None
+        if auto_process:
+            provider = get_ai_provider()
+            analysis = provider.auto_process_note(raw_text)
+
+        return FileUploadResponse(
+            item=InboxItem(**item),
+            auto_analysis=analysis,
+            stored_filename=stored_filename,
+            file_url=file_url,
+            extracted_length=len(raw_text),
+        )
+    except Exception as exc:
+        logger.exception("Failed to process uploaded file")
+        raise HTTPException(
+            status_code=500, detail="Failed to process and store uploaded file."
+        ) from exc
+
+
+@app.get("/api/uploads/{filename}")
+def get_uploaded_file(filename: str):
+    safe_name = Path(filename).name
+    if ".." in filename or safe_name != filename:
+        raise HTTPException(status_code=400, detail="Invalid file path.")
+
+    file_path = (UPLOAD_DIR / safe_name).resolve()
+    if not str(file_path).startswith(str(UPLOAD_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Access denied.")
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    return FileResponse(file_path)
+
+
 @app.post("/api/items", response_model=Union[InboxItemWithAnalysis, InboxItem])
 def create_item(payload: InboxItemCreate, auto_process: bool = Query(False)):
     try:
@@ -329,6 +417,61 @@ def auto_process_item(item_id: int):
 def process_note_text(payload: InboxItemText):
     provider = get_ai_provider()
     return provider.auto_process_note(payload.raw_text)
+
+
+@app.post("/api/items/{item_id}/enhance", response_model=NoteEnhancementResponse)
+def enhance_item(item_id: int):
+    start_time = time.perf_counter()
+    items = list_items_from_db(limit=1000)
+    matched = next((it for it in items if it["id"] == item_id), None)
+    if not matched:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    provider = get_ai_provider()
+    enhancement = provider.enhance_note(matched.get("raw_text") or "")
+    latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    return NoteEnhancementResponse(
+        item_id=item_id,
+        tldr=enhancement.get("tldr", ""),
+        key_points=enhancement.get("key_points", []),
+        key_takeaways=enhancement.get("key_points", []),
+        action_items=enhancement.get("action_items", []),
+        open_questions=enhancement.get("open_questions", []),
+        risks_or_blockers=enhancement.get("open_questions", []),
+        provider=getattr(provider, "provider_name", "mock"),
+        latency_ms=latency_ms,
+    )
+
+
+@app.get("/api/items/{item_id}/related", response_model=RelatedItemsResponse)
+def get_related_items(item_id: int, limit: int = Query(3, ge=1, le=10)):
+    items = list_items_from_db(limit=500)
+    current = next((it for it in items if it["id"] == item_id), None)
+    if not current:
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    query_text = current.get("raw_text") or current.get("title") or ""
+    other_items = [it for it in items if it["id"] != item_id]
+
+    matched_notes, citations = retrieve_relevant_notes(other_items, query_text, top_k=limit)
+    related = []
+    for note, cit in zip(matched_notes, citations):
+        text = note.get("raw_text") or ""
+        tags = [w.lstrip("#").lower() for w in text.split() if w.startswith("#")]
+        snippet = getattr(cit, "snippet", None) or (cit.get("snippet") if isinstance(cit, dict) else text[:120])
+        score = getattr(cit, "relevance_score", None) or (cit.get("score") if isinstance(cit, dict) else 0.0)
+        related.append(
+            RelatedItem(
+                id=note["id"],
+                title=note.get("title"),
+                snippet=snippet,
+                similarity_score=round(score, 3),
+                shared_tags=tags[:4],
+            )
+        )
+
+    return RelatedItemsResponse(item_id=item_id, related_items=related)
 
 
 @app.post("/api/ask", response_model=AskInboxResponse)
@@ -584,6 +727,47 @@ def reopen_task(task_id: int):
 @app.post("/api/tasks/{task_id}/dismiss", response_model=Task)
 def dismiss_task(task_id: int):
     return _transition_task(task_id, "dismissed")
+
+
+@app.post("/api/tasks/{task_id}/decompose", response_model=TaskDecompositionResponse)
+def decompose_task_endpoint(task_id: int):
+    start_time = time.perf_counter()
+    task = get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    provider = get_ai_provider()
+    subtasks = provider.decompose_task(task["text"])
+    latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    return TaskDecompositionResponse(
+        task_id=task_id,
+        parent_task_text=task["text"],
+        subtasks=[SubtaskDecomposition(**st) for st in subtasks],
+        provider=getattr(provider, "provider_name", "mock"),
+        latency_ms=latency_ms,
+    )
+
+
+@app.post("/api/tasks/{task_id}/apply-subtasks", response_model=List[Task])
+def apply_subtasks(task_id: int, payload: ApplySubtasksRequest):
+    task = get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    source_id = task.get("source_item_ids", [None])[0] if task.get("source_item_ids") else None
+    created = []
+    for st in payload.subtasks:
+        timing = f"{st.estimated_minutes}m"
+        t = add_custom_task_to_db(
+            text=st.title,
+            priority=st.priority,
+            timing_text=timing,
+            source_item_id=source_id,
+        )
+        created.append(Task(**t))
+
+    return created
 
 
 @app.get(

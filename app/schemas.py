@@ -258,3 +258,55 @@ class AIMetricsSummary(BaseModel):
     avg_latency_ms: float = 0.0
     recent_calls: List[AIMetricItem] = Field(default_factory=list)
 
+
+class SubtaskDecomposition(BaseModel):
+    title: str = Field(..., min_length=1)
+    estimated_minutes: int = Field(30, ge=5, le=480)
+    priority: Priority = "Medium"
+
+
+class TaskDecompositionResponse(BaseModel):
+    task_id: int
+    parent_task_text: str
+    subtasks: List[SubtaskDecomposition] = Field(default_factory=list)
+    provider: str = "mock"
+    latency_ms: float = 0.0
+
+
+class ApplySubtasksRequest(BaseModel):
+    subtasks: List[SubtaskDecomposition] = Field(default_factory=list)
+
+
+class NoteEnhancementResponse(BaseModel):
+    item_id: int
+    tldr: str
+    key_points: List[str] = Field(default_factory=list)
+    key_takeaways: List[str] = Field(default_factory=list)
+    action_items: List[ExtractedTask] = Field(default_factory=list)
+    open_questions: List[str] = Field(default_factory=list)
+    risks_or_blockers: List[str] = Field(default_factory=list)
+    provider: str = "mock"
+    latency_ms: float = 0.0
+
+
+class RelatedItem(BaseModel):
+    id: int
+    title: Optional[str] = None
+    snippet: str
+    similarity_score: float
+    shared_tags: List[str] = Field(default_factory=list)
+
+
+class RelatedItemsResponse(BaseModel):
+    item_id: int
+    related_items: List[RelatedItem] = Field(default_factory=list)
+
+
+class FileUploadResponse(BaseModel):
+    item: InboxItem
+    auto_analysis: Optional[NoteAutoAnalysis] = None
+    stored_filename: str
+    file_url: str
+    extracted_length: int
+
+

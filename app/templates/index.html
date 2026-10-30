@@ -78,7 +78,7 @@
                         <h2>Dashboard Overview</h2>
                     </div>
 
-                    <div class="dashboard-stats">
+                    <div class="dashboard-stats" style="grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));">
                         <div class="stat-card">
                             <div class="stat-icon">📄</div>
                             <div class="stat-value" id="statTotalItems">0</div>
@@ -90,13 +90,23 @@
                             <div class="stat-label">Open Tasks</div>
                         </div>
                         <div class="stat-card">
+                            <div class="stat-icon">✅</div>
+                            <div class="stat-value" id="statCompletedTasks" style="color:var(--color-success, #10b981);">0</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">✕</div>
+                            <div class="stat-value" id="statDismissedTasks" style="opacity:0.75;">0</div>
+                            <div class="stat-label">Dismissed</div>
+                        </div>
+                        <div class="stat-card">
                             <div class="stat-icon">⚡</div>
-                            <div class="stat-value" id="statAnalysisMode" style="font-size:1.25rem;">—</div>
+                            <div class="stat-value" id="statAnalysisMode" style="font-size:1.1rem;">—</div>
                             <div class="stat-label">Analysis Mode</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon">🕒</div>
-                            <div class="stat-value" id="statLastAnalysis" style="font-size:1.25rem;">—</div>
+                            <div class="stat-value" id="statLastAnalysis" style="font-size:1.1rem;">—</div>
                             <div class="stat-label">Last Analysis</div>
                         </div>
                     </div>
@@ -189,8 +199,23 @@
                             <button type="button" class="btn btn-sm btn-ghost btn-template" data-template="clear" style="padding:4px 10px;font-size:0.8rem;color:var(--text-muted);">🧹 Clear</button>
                         </div>
 
-                        <textarea id="noteText" placeholder="Capture a thought, task, meeting note, or reminder... (Press Ctrl+Enter to save)"></textarea>
-                        <div class="input-actions">
+                        <!-- File Upload Preview Chip -->
+                        <div id="fileUploadPreview" style="display:none;align-items:center;gap:10px;padding:8px 14px;background:var(--bg-subtle, #f8fafc);border:1px dashed var(--color-primary, #0284c7);border-radius:var(--radius-md);margin-bottom:12px;">
+                            <span id="filePreviewIcon" style="font-size:1.2rem;">📎</span>
+                            <div style="flex:1;min-width:0;">
+                                <div id="filePreviewName" style="font-size:0.85rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+                                <div id="filePreviewSize" style="font-size:0.75rem;color:var(--text-muted);"></div>
+                            </div>
+                            <button type="button" id="removeFileBtn" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:1.1rem;color:var(--text-muted);" title="Remove file">&times;</button>
+                        </div>
+
+                        <textarea id="noteText" placeholder="Capture a thought, task, meeting note, or drop a file/image here... (Press Ctrl+Enter to save)"></textarea>
+                        <div class="input-actions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <input type="file" id="fileUploadInput" style="display:none;" accept="image/*,.pdf,.txt,.md,.markdown,.json,.csv,.log,audio/*">
+                            <button type="button" id="attachFileBtn" class="btn btn-sm btn-ghost" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.85rem;">
+                                <span>📎</span>
+                                <span>Attach File / Image</span>
+                            </button>
                             <span id="noteStatus" class="status-msg" style="color:var(--text-muted);font-size:0.85rem;margin-right:auto;"></span>
                             <button id="addNoteBtn" class="btn btn-primary">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -275,14 +300,30 @@
                                 <option value="Medium">Medium</option>
                                 <option value="Low">Low</option>
                             </select>
-                            <select id="taskStatusFilter" class="select" style="padding:6px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:0.85rem;">
-                                <option value="open">Open</option>
-                                <option value="completed">Completed</option>
-                                <option value="dismissed">Dismissed</option>
-                                <option value="all">All</option>
-                            </select>
+                            <input type="hidden" id="taskStatusFilter" value="open">
                         </div>
                     </div>
+
+                    <!-- Interactive Status Tabs -->
+                    <div class="task-tabs-container" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:12px;">
+                        <button type="button" class="btn btn-sm btn-primary task-tab-btn active" data-task-status="open" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                            <span>⏳ Open</span>
+                            <span id="taskCountOpen" class="badge" style="background:rgba(255,255,255,0.25);font-size:0.75rem;">0</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="completed" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                            <span>✅ Completed</span>
+                            <span id="taskCountCompleted" class="badge" style="background:var(--color-success, #10b981);color:#fff;font-size:0.75rem;">0</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="dismissed" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                            <span>✕ Dismissed</span>
+                            <span id="taskCountDismissed" class="badge" style="background:var(--text-muted);color:#fff;font-size:0.75rem;">0</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="all" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                            <span>📋 All</span>
+                            <span id="taskCountAll" class="badge" style="background:var(--bg-subtle, #e2e8f0);color:var(--text-secondary);font-size:0.75rem;">0</span>
+                        </button>
+                    </div>
+
                     <div id="taskStatus" class="status-msg" style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);"></div>
                     <div id="tasks"></div>
                 </section>
@@ -291,7 +332,7 @@
     </div>
 
     <!-- Batch Import Modal -->
-    <div id="importModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+    <div id="importModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
         <div class="card" style="max-width:540px;width:100%;box-shadow:var(--shadow-xl);background:var(--bg-secondary);">
             <h3 style="margin-bottom:8px;">📥 Batch Import Notes</h3>
             <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">Paste multiple notes separated by <code>---</code> on a new line:</p>
@@ -299,6 +340,44 @@
             <div style="display:flex;justify-content:flex-end;gap:8px;">
                 <button id="cancelImportBtn" class="btn btn-sm btn-ghost">Cancel</button>
                 <button id="confirmImportBtn" class="btn btn-sm btn-primary">Import Notes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Note Enhancement Modal -->
+    <div id="enhanceModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:620px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-xl);background:var(--bg-secondary);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="display:flex;align-items:center;gap:6px;font-size:1.1rem;">
+                    <span>✨</span> AI Note Enhancement & Action Plan
+                </h3>
+                <button type="button" id="closeEnhanceBtn" class="btn btn-sm btn-ghost" style="font-size:1.2rem;padding:2px 8px;">&times;</button>
+            </div>
+            <div id="enhanceContent" style="font-size:0.92rem;line-height:1.6;">
+                <div class="skeleton" style="height:80px;margin-bottom:12px;"></div>
+                <div class="skeleton" style="height:120px;"></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+                <button id="copyEnhanceBtn" class="btn btn-sm btn-ghost">📋 Copy Action Plan</button>
+                <button id="doneEnhanceBtn" class="btn btn-sm btn-primary">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Task Breakdown Modal -->
+    <div id="breakdownModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:580px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow-xl);background:var(--bg-secondary);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 style="display:flex;align-items:center;gap:6px;font-size:1.1rem;">
+                    <span>🤖</span> AI Subtask Breakdown
+                </h3>
+                <button type="button" id="closeBreakdownBtn" class="btn btn-sm btn-ghost" style="font-size:1.2rem;padding:2px 8px;">&times;</button>
+            </div>
+            <p id="breakdownParentTitle" style="font-size:0.9rem;color:var(--text-secondary);font-weight:600;margin-bottom:12px;padding:8px 12px;background:var(--bg-subtle, #f8fafc);border-radius:var(--radius-sm);"></p>
+            <div id="breakdownSubtasksList" style="margin-bottom:16px;"></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding-top:12px;">
+                <button id="cancelBreakdownBtn" class="btn btn-sm btn-ghost">Cancel</button>
+                <button id="applyBreakdownBtn" class="btn btn-sm btn-primary">⚡ Add All to Inbox Tasks</button>
             </div>
         </div>
     </div>

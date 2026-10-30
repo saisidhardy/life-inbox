@@ -14,6 +14,7 @@ dependencies = [
     "alembic>=1.11.0",
     "openai>=1.0.0",
     "requests>=2.31.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +27,7 @@ dev = [
 [tool.ruff]
 target-version = "py310"
 line-length = 120
+exclude = ["reference"]
 
 [tool.ruff.lint]
 select = ["E", "F"]

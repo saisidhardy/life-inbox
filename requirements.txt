@@ -7,3 +7,4 @@ openai
 requests
 pytest
 httpx
+python-multipart  # Required by FastAPI for handling multipart/form-data file uploads
