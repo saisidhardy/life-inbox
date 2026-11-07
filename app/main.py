@@ -37,6 +37,14 @@ from app.database import (
     update_item_in_db,
     update_note_in_db,
 )
+from app.integrations import (
+    dispatch_outbound_webhook,
+    generate_github_issue_url,
+    generate_google_calendar_url,
+    generate_ics_calendar,
+    generate_linear_issue_url,
+    parse_timing_to_datetime,
+)
 from app.organizer import analyze_inbox_with_openai, validate_analysis_result
 from app.rate_limit import enforce_analyze_rate_limit
 from app.retrieval import extract_citations_from_text, retrieve_relevant_notes
@@ -45,7 +53,13 @@ from app.schemas import (
     ApplySubtasksRequest,
     AskInboxRequest,
     AskInboxResponse,
+    CalendarExportResponse,
+    DispatchWebhookRequest,
+    DispatchWebhookResponse,
+    ExternalIssueLinkResponse,
     FileUploadResponse,
+    InboundWebhookPayload,
+    InboundWebhookResponse,
     InboxItem,
     InboxItemCreate,
     InboxItemText,
@@ -812,6 +826,196 @@ def analyze_inbox(request: Request):
             status_code=500,
             detail="Unable to analyze inbox. Please try again.",
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Integrations Hub & Connectors Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/api/webhooks/inbound",
+    response_model=InboundWebhookResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def receive_inbound_webhook(payload: InboundWebhookPayload):
+    """Receive notes and tasks from Apple Shortcuts, Zapier, Make, Raycast, or curl."""
+    try:
+        raw_text = payload.text.strip()
+        if payload.tags:
+            tag_str = " ".join(f"#{t.lstrip('#')}" for t in payload.tags if t.strip())
+            if tag_str:
+                raw_text += f"\n\n{tag_str}"
+
+        item = add_item_to_db(raw_text)
+        created_tasks = 0
+
+        if payload.auto_process:
+            provider = get_ai_provider()
+            analysis = provider.auto_process_note(raw_text)
+            for t in analysis.extracted_tasks:
+                add_custom_task_to_db(
+                    text=t.title,
+                    priority=t.priority,
+                    timing_text=t.due_date,
+                    source_item_id=item["id"],
+                )
+                created_tasks += 1
+
+        source_label = payload.source or "webhook"
+        return InboundWebhookResponse(
+            status="received",
+            item_id=item["id"],
+            extracted_tasks_count=created_tasks,
+            message=f"Successfully ingested note from {source_label} with {created_tasks} task(s).",
+        )
+    except Exception as exc:
+        logger.exception("Failed to process inbound webhook")
+        raise HTTPException(
+            status_code=500, detail="Failed to ingest inbound webhook payload."
+        ) from exc
+
+
+@app.get("/api/tasks/{task_id}/calendar")
+def get_task_calendar(
+    task_id: int, format: str = Query("json", pattern="^(json|ics)$")
+):
+    """Generate 1-click Google Calendar link or RFC 5545 .ics file for a task."""
+    task = get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    start_dt, end_dt = parse_timing_to_datetime(task.get("timing_text"))
+    title = f"Task: {task['text']}"
+    timing_desc = task.get("timing_text") or "Unspecified"
+    details = f"Priority: {task['priority']}\\nTiming: {timing_desc}\\nCreated via Life Inbox"
+
+    ics_content = generate_ics_calendar(
+        title=title,
+        details=details,
+        start_dt=start_dt,
+        end_dt=end_dt,
+        uid=f"life-inbox-task-{task_id}@lifeinbox.app",
+    )
+
+    if format == "ics":
+        return Response(
+            content=ics_content,
+            media_type="text/calendar; charset=utf-8",
+            headers={
+                "Content-Disposition": f"attachment; filename=task-{task_id}.ics"
+            },
+        )
+
+    gcal_url = generate_google_calendar_url(
+        title=title,
+        details=details,
+        start_dt=start_dt,
+        end_dt=end_dt,
+    )
+
+    return CalendarExportResponse(
+        task_id=task_id,
+        task_text=task["text"],
+        google_calendar_url=gcal_url,
+        ics_content=ics_content,
+        scheduled_date=start_dt.isoformat(),
+    )
+
+
+@app.post("/api/integrations/dispatch", response_model=DispatchWebhookResponse)
+def dispatch_integration_webhook(payload: DispatchWebhookRequest):
+    """Dispatch daily briefing, task notification, or custom alert to Slack or Discord."""
+    try:
+        now_str = datetime.now(timezone.utc).isoformat()
+        if payload.payload_type == "daily_briefing":
+            open_tasks = list_tasks_from_db("open")
+            stale_items = get_stale_items(days=7)
+            items = list_items_from_db(limit=100)
+            title = "Life Inbox — Daily Executive Briefing"
+            msg = (
+                f"You have {len(open_tasks)} open task(s) and {len(stale_items)} stale item(s) needing attention."
+            )
+            top_tasks = "\n".join(
+                f"• [{t['priority']}] {t['text']}" for t in open_tasks[:5]
+            )
+            if top_tasks:
+                msg += f"\n\n*Top Actions:*\n{top_tasks}"
+            fields = {
+                "Open Tasks": len(open_tasks),
+                "Total Notes": len(items),
+                "Stale Notes": len(stale_items),
+            }
+        elif payload.payload_type == "task":
+            if not payload.task_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="task_id required when payload_type is 'task'",
+                )
+            task = get_task_by_id(payload.task_id)
+            if not task:
+                raise HTTPException(status_code=404, detail="Task not found.")
+            timing_info = f" · Timing: {task['timing_text']}" if task.get("timing_text") else ""
+            title = f"Task: {task['text']}"
+            msg = f"Priority: {task['priority']}{timing_info}"
+            fields = {"Status": task["status"], "Priority": task["priority"]}
+        else:
+            title = "Life Inbox Notification"
+            msg = payload.custom_text or "Notification from Life Inbox"
+            fields = None
+
+        ok, code, dest = dispatch_outbound_webhook(
+            webhook_url=payload.webhook_url,
+            title=title,
+            message=msg,
+            fields=fields,
+        )
+
+        if not ok and code == 500:
+            raise HTTPException(
+                status_code=502, detail=f"Webhook delivery failed: {dest}"
+            )
+
+        return DispatchWebhookResponse(
+            status="delivered" if ok else "failed",
+            status_code=code,
+            destination=dest,
+            delivered_at=now_str,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to dispatch integration webhook")
+        raise HTTPException(
+            status_code=500, detail="Failed to dispatch integration webhook."
+        ) from exc
+
+
+@app.get("/api/tasks/{task_id}/external-links", response_model=ExternalIssueLinkResponse)
+def get_task_external_links(task_id: int):
+    """Generate pre-filled 1-click GitHub and Linear issue drafts for a task."""
+    task = get_task_by_id(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found.")
+
+    title = task["text"]
+    timing_info = task.get("timing_text") or "None"
+    body = (
+        f"**Task**: {task['text']}\n\n"
+        f"**Priority**: {task['priority']}\n"
+        f"**Status**: {task['status']}\n"
+        f"**Timing**: {timing_info}\n\n"
+        f"*Imported from Life Inbox task #{task_id}*"
+    )
+    gh_url = generate_github_issue_url(title=title, body=body)
+    linear_url = generate_linear_issue_url(title=title, description=body)
+
+    return ExternalIssueLinkResponse(
+        task_id=task_id,
+        title=title,
+        github_issue_url=gh_url,
+        linear_issue_url=linear_url,
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

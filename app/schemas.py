@@ -310,3 +310,52 @@ class FileUploadResponse(BaseModel):
     extracted_length: int
 
 
+# ---------------------------------------------------------------------------
+# Integrations & Hub Schemas
+# ---------------------------------------------------------------------------
+
+
+class InboundWebhookPayload(BaseModel):
+    text: str = Field(..., min_length=1, max_length=10000)
+    source: Optional[str] = Field("webhook", max_length=50)
+    auto_process: bool = True
+    tags: Optional[List[str]] = Field(default_factory=list)
+
+
+class InboundWebhookResponse(BaseModel):
+    status: str = "received"
+    item_id: int
+    extracted_tasks_count: int = 0
+    message: str
+
+
+class CalendarExportResponse(BaseModel):
+    task_id: int
+    task_text: str
+    google_calendar_url: str
+    ics_content: str
+    scheduled_date: Optional[str] = None
+
+
+class DispatchWebhookRequest(BaseModel):
+    webhook_url: str = Field(..., min_length=10, max_length=1000)
+    payload_type: str = Field("daily_briefing", pattern="^(daily_briefing|task|custom)$")
+    custom_text: Optional[str] = None
+    task_id: Optional[int] = None
+
+
+class DispatchWebhookResponse(BaseModel):
+    status: str
+    status_code: int
+    destination: str
+    delivered_at: str
+
+
+class ExternalIssueLinkResponse(BaseModel):
+    task_id: int
+    title: str
+    github_issue_url: str
+    linear_issue_url: str
+
+
+

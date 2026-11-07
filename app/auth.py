@@ -28,8 +28,8 @@ def extract_token_from_request(request: Request) -> Optional[str]:
         if not scheme.lower() == "bearer" and not token:
             return auth_header.strip()
 
-    # 2. X-App-Token header
-    x_token = request.headers.get("X-App-Token")
+    # 2. X-App-Token or X-Webhook-Secret header
+    x_token = request.headers.get("X-App-Token") or request.headers.get("X-Webhook-Secret")
     if x_token:
         return x_token.strip()
 
