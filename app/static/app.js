@@ -201,7 +201,7 @@
   // Section navigation
   // --------------------------------------------------------------------------
 
-  const SECTIONS = ['dashboard', 'inbox', 'analysis', 'tasks'];
+  const SECTIONS = ['dashboard', 'inbox', 'analysis', 'tasks', 'integrations'];
 
   function initNavigation() {
     const navItems = $$('.nav-item[data-section]');
@@ -249,8 +249,12 @@
 
     if (section === 'inbox') loadNotes();
     if (section === 'tasks') loadTasks();
-    if (section === 'dashboard') refreshDashboard();
+    if (section === 'dashboard') {
+      refreshDashboard();
+      loadBriefing();
+    }
     if (section === 'analysis') loadLatestAnalysis();
+    if (section === 'integrations') initIntegrationsHub();
   }
 
   // --------------------------------------------------------------------------
@@ -1071,6 +1075,7 @@
     try {
       // Fetch all tasks to update counts across all tabs accurately
       const allTasks = await api('/api/tasks', { params: { status: 'all' } });
+      window._allTasks = allTasks;
       const openTasks = allTasks.filter(t => t.status === 'open');
       const completedTasks = allTasks.filter(t => t.status === 'completed');
       const dismissedTasks = allTasks.filter(t => t.status === 'dismissed');
@@ -1144,18 +1149,22 @@
       actions = `
         <button class="btn btn--sm btn--primary" data-task-action="complete" data-task-id="${task.id}" title="Mark completed">✓ Complete</button>
         <button class="btn btn--sm btn--ghost" data-task-action="dismiss" data-task-id="${task.id}" title="Dismiss task">✕ Dismiss</button>
-        <button class="btn btn--sm btn--ghost" data-task-action="decompose" data-task-id="${task.id}" title="AI Subtask Breakdown">🤖 Break Down</button>`;
+        <button class="btn btn--sm btn--ghost" data-task-action="decompose" data-task-id="${task.id}" title="AI Subtask Breakdown">🤖 Break Down</button>
+        <button class="btn btn--sm btn--ghost" data-task-action="export" data-task-id="${task.id}" title="Sync Calendar or Issue Bridge">⚡ Actions</button>`;
     } else if (task.status === 'completed') {
       actions = `
         <span class="badge" style="background:var(--color-success, #10b981);color:#fff;margin-right:6px;">✓ Completed</span>
-        <button class="btn btn--sm btn--ghost" data-task-action="reopen" data-task-id="${task.id}" title="Reopen task">↩ Reopen</button>`;
+        <button class="btn btn--sm btn--ghost" data-task-action="reopen" data-task-id="${task.id}" title="Reopen task">↩ Reopen</button>
+        <button class="btn btn--sm btn--ghost" data-task-action="export" data-task-id="${task.id}" title="Sync Calendar or Issue Bridge">⚡ Actions</button>`;
     } else if (task.status === 'dismissed') {
       actions = `
         <span class="badge" style="background:var(--text-muted);color:#fff;margin-right:6px;">✕ Dismissed</span>
-        <button class="btn btn--sm btn--ghost" data-task-action="reopen" data-task-id="${task.id}" title="Reopen task">↩ Reopen</button>`;
+        <button class="btn btn--sm btn--ghost" data-task-action="reopen" data-task-id="${task.id}" title="Reopen task">↩ Reopen</button>
+        <button class="btn btn--sm btn--ghost" data-task-action="export" data-task-id="${task.id}" title="Sync Calendar or Issue Bridge">⚡ Actions</button>`;
     } else {
       actions = `
-        <button class="btn btn--sm btn--ghost" data-task-action="reopen" data-task-id="${task.id}">Reopen</button>`;
+        <button class="btn btn--sm btn--ghost" data-task-action="reopen" data-task-id="${task.id}">Reopen</button>
+        <button class="btn btn--sm btn--ghost" data-task-action="export" data-task-id="${task.id}">⚡ Actions</button>`;
     }
 
     return `
@@ -1179,6 +1188,10 @@
   async function handleTaskAction(action, taskId) {
     if (action === 'decompose') {
       openBreakdownModal(taskId);
+      return;
+    }
+    if (action === 'export') {
+      openTaskExportModal(taskId);
       return;
     }
 
@@ -1615,13 +1628,698 @@
     });
   }
 
+  // --------------------------------------------------------------------------
+  // Task External Sync Modal (Google Calendar, iCal, GitHub, Linear)
+  // --------------------------------------------------------------------------
+
+  async function openTaskExportModal(taskId) {
+    const modal = $('#taskExportModal');
+    const titleEl = $('#taskExportTitle');
+    const descEl = $('#taskExportDesc');
+    const googleCalBtn = $('#taskGoogleCalBtn');
+    const icsBtn = $('#taskIcsBtn');
+    const githubBtn = $('#taskGithubBtn');
+    const linearBtn = $('#taskLinearBtn');
+    const closeBtn = $('#closeTaskExportBtn');
+    const doneBtn = $('#doneTaskExportBtn');
+
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+    const closeModal = () => { modal.style.display = 'none'; };
+    if (closeBtn) closeBtn.onclick = closeModal;
+    if (doneBtn) doneBtn.onclick = closeModal;
+
+    if (titleEl) titleEl.textContent = `⚡ Sync: Task #${taskId}`;
+    if (descEl) descEl.textContent = 'Loading calendar and issue tracking links...';
+
+    try {
+      const [cal, links] = await Promise.all([
+        api(`/api/tasks/${taskId}/calendar`),
+        api(`/api/tasks/${taskId}/external-links`),
+      ]);
+
+      if (descEl) descEl.textContent = cal.title || 'Export task to calendar or external project trackers.';
+
+      if (googleCalBtn) {
+        googleCalBtn.href = cal.google_calendar_url || '#';
+        googleCalBtn.onclick = () => {
+          showToast('Opening Google Calendar...', 'info');
+        };
+      }
+
+      if (icsBtn) {
+        icsBtn.href = `/api/tasks/${taskId}/calendar?format=ics`;
+        icsBtn.setAttribute('download', `task_${taskId}.ics`);
+        icsBtn.onclick = () => {
+          showToast('Downloading .ics calendar event...', 'info');
+        };
+      }
+
+      if (githubBtn) {
+        githubBtn.href = links.github_issue_url || '#';
+      }
+
+      if (linearBtn) {
+        linearBtn.href = links.linear_issue_url || '#';
+      }
+    } catch (err) {
+      if (descEl) descEl.textContent = `Failed to load links: ${err.message}`;
+      showToast(err.message, 'error');
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Executive Daily Morning Briefing
+  // --------------------------------------------------------------------------
+
+  let cachedBriefing = null;
+
+  async function loadBriefing() {
+    const card = $('#executiveBriefingCard');
+    if (!card) return;
+    try {
+      const b = await api('/api/briefing/today');
+      cachedBriefing = b;
+      const greetingEl = $('#briefingGreeting');
+      if (greetingEl) greetingEl.textContent = b.greeting || 'Good day, Chief';
+
+      const dateEl = $('#briefingDate');
+      if (dateEl) {
+        const pCount = (b.actionable_priorities || []).length;
+        dateEl.textContent = `${b.date || 'Today'} · ${pCount} priority focus item${pCount !== 1 ? 's' : ''}`;
+      }
+
+      const scoreEl = $('#briefingHealthScore');
+      if (scoreEl) scoreEl.textContent = `Inbox ${b.inbox_health_score || 95}% Healthy`;
+
+      const summaryEl = $('#briefingSummaryText');
+      if (summaryEl) summaryEl.textContent = b.executive_summary || '';
+
+      const recList = $('#briefingRecommendationsList');
+      if (recList && b.top_recommendations && b.top_recommendations.length) {
+        recList.innerHTML = b.top_recommendations.map(r => `
+          <div style="font-size:0.85rem;color:var(--text-secondary);display:flex;align-items:flex-start;gap:6px;">
+            <span style="color:var(--accent);">⚡</span>
+            <span>${esc(r)}</span>
+          </div>
+        `).join('');
+      } else if (recList) {
+        recList.innerHTML = '';
+      }
+    } catch (err) {
+      console.warn('Failed to load briefing:', err);
+    }
+  }
+
+  function initBriefing() {
+    const refreshBtn = $('#refreshBriefingBtn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', async () => {
+        setButtonLoading(refreshBtn, true);
+        await loadBriefing();
+        setButtonLoading(refreshBtn, false);
+        showToast('Executive standup briefing refreshed!', 'success');
+      });
+    }
+
+    const openMatrixBtn = $('#briefingOpenMatrixBtn');
+    if (openMatrixBtn) {
+      openMatrixBtn.addEventListener('click', () => {
+        navigateTo('tasks');
+        switchToMatrixView();
+      });
+    }
+
+    const syncCalBtn = $('#briefingSyncCalendarBtn');
+    if (syncCalBtn) {
+      syncCalBtn.addEventListener('click', async () => {
+        if (!cachedBriefing || !cachedBriefing.actionable_priorities || !cachedBriefing.actionable_priorities.length) {
+          showToast('No priorities available to sync to calendar.', 'info');
+          return;
+        }
+        const topItem = cachedBriefing.actionable_priorities[0];
+        try {
+          const calData = await api(`/api/tasks/${topItem.id}/calendar`);
+          if (calData && calData.google_calendar_url) {
+            window.open(calData.google_calendar_url, '_blank');
+            showToast('Opening Google Calendar for top focus priority!', 'success');
+          }
+        } catch (err) {
+          showToast(`Calendar sync error: ${err.message}`, 'error');
+        }
+      });
+    }
+
+    const shareSlackBtn = $('#briefingShareSlackBtn');
+    if (shareSlackBtn) {
+      shareSlackBtn.addEventListener('click', async () => {
+        const storedUrl = localStorage.getItem('life_inbox_slack_webhook');
+        if (!storedUrl) {
+          navigateTo('integrations');
+          showToast('Please configure a Slack/Discord webhook URL first.', 'info');
+          const input = $('#slackWebhookInput');
+          if (input) input.focus();
+          return;
+        }
+        if (!cachedBriefing) await loadBriefing();
+        setButtonLoading(shareSlackBtn, true);
+        try {
+          await api('/api/integrations/dispatch', {
+            method: 'POST',
+            body: {
+              webhook_url: storedUrl,
+              target_type: 'slack',
+              text: `*${cachedBriefing.greeting}* - Daily Executive Briefing\n${cachedBriefing.executive_summary}`
+            }
+          });
+          showToast('Dispatched morning briefing to your channel!', 'success');
+        } catch (err) {
+          showToast(`Dispatch failed: ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(shareSlackBtn, false);
+        }
+      });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Live Voice Recorder
+  // --------------------------------------------------------------------------
+
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let recordTimerInterval = null;
+  let recordingSeconds = 0;
+
+  function initVoiceRecorder() {
+    const recordBtn = $('#recordVoiceBtn');
+    const recordingBar = $('#voiceRecordingBar');
+    const timerEl = $('#recordingTimer');
+    const stopBtn = $('#stopVoiceBtn');
+    const cancelBtn = $('#cancelVoiceBtn');
+
+    if (!recordBtn || !recordingBar) return;
+
+    recordBtn.addEventListener('click', async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('Audio recording is not supported in this browser.', 'error');
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.start(250);
+        recordingSeconds = 0;
+        if (timerEl) timerEl.textContent = '00:00';
+        recordTimerInterval = setInterval(() => {
+          recordingSeconds++;
+          const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+          const secs = String(recordingSeconds % 60).padStart(2, '0');
+          if (timerEl) timerEl.textContent = `${mins}:${secs}`;
+        }, 1000);
+
+        recordingBar.style.display = 'flex';
+        recordBtn.style.display = 'none';
+        showToast('Listening... Speak your thought or tasks.', 'info');
+      } catch (err) {
+        showToast(`Microphone access error: ${err.message}`, 'error');
+      }
+    });
+
+    const cleanupRecorder = () => {
+      if (recordTimerInterval) clearInterval(recordTimerInterval);
+      recordTimerInterval = null;
+      if (mediaRecorder && mediaRecorder.stream) {
+        mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      }
+      mediaRecorder = null;
+      recordingBar.style.display = 'none';
+      recordBtn.style.display = 'inline-flex';
+    };
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        cleanupRecorder();
+        audioChunks = [];
+        showToast('Voice recording cancelled.', 'info');
+      });
+    }
+
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        if (!mediaRecorder) return;
+        setButtonLoading(stopBtn, true);
+
+        mediaRecorder.onstop = async () => {
+          try {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'voice_memo.webm');
+
+            const token = getStoredAuthToken();
+            const headers = {};
+            if (token) {
+              headers['Authorization'] = `Bearer ${token}`;
+              headers['X-App-Token'] = token;
+            }
+
+            showToast('Processing & transcribing voice memo with AI...', 'info');
+            const res = await fetch('/api/upload?auto_process=true', {
+              method: 'POST',
+              headers,
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || 'Voice upload failed');
+            }
+
+            const data = await res.json();
+            const taskCount = data.auto_analysis && data.auto_analysis.extracted_tasks ? data.auto_analysis.extracted_tasks.length : 0;
+            showToast(`Voice memo transcribed! Extracted ${taskCount} task${taskCount !== 1 ? 's' : ''}`, 'success');
+
+            await loadNotes();
+            await loadTasks();
+            refreshDashboard();
+            loadBriefing();
+          } catch (err) {
+            showToast(err.message, 'error');
+          } finally {
+            setButtonLoading(stopBtn, false);
+            cleanupRecorder();
+          }
+        };
+
+        mediaRecorder.stop();
+      });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Eisenhower 4-Quadrant Focus Matrix
+  // --------------------------------------------------------------------------
+
+  function switchToMatrixView() {
+    const listBtn = $('#taskViewListBtn');
+    const matrixBtn = $('#taskViewMatrixBtn');
+    const listView = $('#tasksListView');
+    const matrixView = $('#tasksMatrixView');
+
+    if (listBtn) {
+      listBtn.classList.remove('btn-primary');
+      listBtn.classList.add('btn-ghost');
+    }
+    if (matrixBtn) {
+      matrixBtn.classList.add('btn-primary');
+      matrixBtn.classList.remove('btn-ghost');
+    }
+    if (listView) listView.style.display = 'none';
+    if (matrixView) matrixView.style.display = 'block';
+    loadEisenhowerMatrix();
+  }
+
+  function switchToListView() {
+    const listBtn = $('#taskViewListBtn');
+    const matrixBtn = $('#taskViewMatrixBtn');
+    const listView = $('#tasksListView');
+    const matrixView = $('#tasksMatrixView');
+
+    if (matrixBtn) {
+      matrixBtn.classList.remove('btn-primary');
+      matrixBtn.classList.add('btn-ghost');
+    }
+    if (listBtn) {
+      listBtn.classList.add('btn-primary');
+      listBtn.classList.remove('btn-ghost');
+    }
+    if (matrixView) matrixView.style.display = 'none';
+    if (listView) listView.style.display = 'block';
+    loadTasks();
+  }
+
+  async function loadEisenhowerMatrix() {
+    try {
+      const data = await api('/api/tasks/matrix');
+      const q = data.quadrants;
+
+      const renderQuadrant = (containerId, countId, tasks) => {
+        const container = $(`#${containerId}`);
+        const count = $(`#${countId}`);
+        if (count) count.textContent = tasks.length;
+        if (!container) return;
+        if (!tasks.length) {
+          container.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted);font-style:italic;padding:8px 0;">No tasks in this quadrant</div>';
+          return;
+        }
+        container.innerHTML = tasks.map(t => `
+          <div class="matrix-task-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;gap:8px;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:0.85rem;font-weight:500;color:var(--text-primary);word-break:break-word;">${esc(t.text)}</div>
+              ${t.timing_text ? `<div style="font-size:0.75rem;color:var(--text-muted);">🕒 ${esc(t.timing_text)}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;">
+              <button class="btn btn-sm btn-ghost" data-matrix-action="complete" data-task-id="${t.id}" title="Complete" style="padding:2px 6px;font-size:0.75rem;">✓</button>
+              <button class="btn btn-sm btn-ghost" data-matrix-action="export" data-task-id="${t.id}" title="Actions" style="padding:2px 6px;font-size:0.75rem;">⚡</button>
+            </div>
+          </div>
+        `).join('');
+
+        container.querySelectorAll('[data-matrix-action]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const act = btn.dataset.matrixAction;
+            const tid = btn.dataset.taskId;
+            if (act === 'complete') {
+              await api(`/api/tasks/${tid}/complete`, { method: 'POST' });
+              showToast('Task marked complete!', 'success');
+              loadEisenhowerMatrix();
+              refreshDashboard();
+            } else if (act === 'export') {
+              openTaskExportModal(tid);
+            }
+          });
+        });
+      };
+
+      renderQuadrant('matrixQ1', 'countQ1', q.q1_do_first || []);
+      renderQuadrant('matrixQ2', 'countQ2', q.q2_schedule || []);
+      renderQuadrant('matrixQ3', 'countQ3', q.q3_delegate || []);
+      renderQuadrant('matrixQ4', 'countQ4', q.q4_someday || []);
+    } catch (err) {
+      showToast(`Matrix loading failed: ${err.message}`, 'error');
+    }
+  }
+
+  function initEisenhowerMatrix() {
+    const listBtn = $('#taskViewListBtn');
+    const matrixBtn = $('#taskViewMatrixBtn');
+    if (listBtn) listBtn.addEventListener('click', switchToListView);
+    if (matrixBtn) matrixBtn.addEventListener('click', switchToMatrixView);
+
+    const dispatchBtn = $('#taskDispatchAllBtn');
+    if (dispatchBtn) {
+      dispatchBtn.addEventListener('click', async () => {
+        const storedUrl = localStorage.getItem('life_inbox_slack_webhook');
+        if (!storedUrl) {
+          navigateTo('integrations');
+          showToast('Configure a Slack/Discord webhook URL to dispatch tasks.', 'info');
+          return;
+        }
+        setButtonLoading(dispatchBtn, true);
+        try {
+          const matrix = await api('/api/tasks/matrix');
+          const q1 = (matrix.quadrants.q1_do_first || []).map(t => `• 🔥 ${t.text}`).join('\n');
+          const q2 = (matrix.quadrants.q2_schedule || []).map(t => `• 📅 ${t.text}`).join('\n');
+          const msg = `*Life Inbox Focus Matrix Priorities*\n*Do First:*\n${q1 || 'None'}\n\n*Schedule:*\n${q2 || 'None'}`;
+          await api('/api/integrations/dispatch', {
+            method: 'POST',
+            body: { webhook_url: storedUrl, target_type: 'slack', text: msg }
+          });
+          showToast('Focus matrix dispatched to channel!', 'success');
+        } catch (err) {
+          showToast(`Dispatch failed: ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(dispatchBtn, false);
+        }
+      });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Universal Command Palette (Ctrl+K / Cmd+K)
+  // --------------------------------------------------------------------------
+
+  function initCommandPalette() {
+    const modal = $('#cmdPaletteModal');
+    const input = $('#cmdPaletteInput');
+    const list = $('#cmdResultsList');
+    const openBtn = $('#cmdPaletteBtn');
+
+    if (!modal || !input || !list) return;
+
+    let selectedIndex = 0;
+    let currentResults = [];
+
+    const defaultCommands = [
+      { type: 'action', title: 'Create New Note', desc: 'Jump to capture textarea', icon: '📝', handler: () => { navigateTo('inbox'); $('#noteText')?.focus(); } },
+      { type: 'action', title: 'Record Voice Memo', desc: 'Capture spoken thought via mic', icon: '🎙️', handler: () => { navigateTo('inbox'); $('#recordVoiceBtn')?.click(); } },
+      { type: 'action', title: 'Open Eisenhower Focus Matrix', desc: 'View 4-quadrant triage', icon: '🎯', handler: () => { navigateTo('tasks'); switchToMatrixView(); } },
+      { type: 'action', title: 'View Integrations & Webhooks', desc: 'Apple Shortcuts, Slack, Calendar', icon: '🔗', handler: () => { navigateTo('integrations'); } },
+      { type: 'action', title: 'Batch Import Notes', desc: 'Paste multiple notes with ---', icon: '📥', handler: () => { $('#batchImportBtn')?.click(); } },
+      { type: 'action', title: 'Run Weekly AI Digest', desc: 'Generate executive summary', icon: '✨', handler: () => { navigateTo('analysis'); $('#refreshDigestBtn')?.click(); } },
+      { type: 'nav', title: 'Go to Dashboard', desc: 'Executive overview & standup', icon: '📊', handler: () => navigateTo('dashboard') },
+      { type: 'nav', title: 'Go to All Notes', desc: 'Search and filter captured items', icon: '📄', handler: () => navigateTo('inbox') },
+      { type: 'nav', title: 'Go to Tasks', desc: 'Manage open & completed tasks', icon: '✅', handler: () => { navigateTo('tasks'); switchToListView(); } },
+    ];
+
+    const openPalette = () => {
+      modal.style.display = 'flex';
+      input.value = '';
+      selectedIndex = 0;
+      renderCommands(defaultCommands);
+      setTimeout(() => input.focus(), 50);
+    };
+
+    const closePalette = () => {
+      modal.style.display = 'none';
+      input.value = '';
+    };
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closePalette();
+    });
+
+    if (openBtn) openBtn.addEventListener('click', openPalette);
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (modal.style.display === 'flex') closePalette();
+        else openPalette();
+      } else if (e.key === 'Escape' && modal.style.display === 'flex') {
+        e.preventDefault();
+        closePalette();
+      }
+    });
+
+    function renderCommands(items) {
+      currentResults = items;
+      selectedIndex = 0;
+      if (!items.length) {
+        list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.88rem;">No matching commands, notes, or tasks found.</div>`;
+        return;
+      }
+      list.innerHTML = items.map((cmd, idx) => `
+        <div class="cmd-item ${idx === 0 ? 'selected' : ''}" data-cmd-idx="${idx}">
+          <div class="cmd-item-left">
+            <span style="font-size:1.1rem;">${cmd.icon}</span>
+            <div>
+              <div style="font-weight:500;">${esc(cmd.title)}</div>
+              ${cmd.desc ? `<div style="font-size:0.75rem;color:var(--text-muted);">${esc(cmd.desc)}</div>` : ''}
+            </div>
+          </div>
+          <span class="cmd-shortcut">${cmd.type === 'nav' ? 'Navigate' : 'Action'}</span>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('.cmd-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const idx = parseInt(el.dataset.cmdIdx, 10);
+          if (currentResults[idx]) {
+            closePalette();
+            currentResults[idx].handler();
+          }
+        });
+      });
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      if (!q) {
+        renderCommands(defaultCommands);
+        return;
+      }
+
+      const matchingDefaults = defaultCommands.filter(c =>
+        c.title.toLowerCase().includes(q) || (c.desc && c.desc.toLowerCase().includes(q))
+      );
+
+      const matchingNotes = (currentLoadedItems || [])
+        .filter(n => (n.raw_text || '').toLowerCase().includes(q))
+        .slice(0, 4)
+        .map(n => ({
+          type: 'note',
+          title: n.raw_text.slice(0, 48) + (n.raw_text.length > 48 ? '...' : ''),
+          desc: `Note #${n.id} · ${n.item_type || 'Note'}`,
+          icon: '📄',
+          handler: () => {
+            const searchInput = $('#itemSearch');
+            if (searchInput) searchInput.value = n.id;
+            navigateTo('inbox');
+            syncFiltersToUrl();
+            loadNotes();
+          }
+        }));
+
+      const allTasksList = window._allTasks || currentTasks || [];
+      const matchingTasks = allTasksList
+        .filter(t => (t.text || '').toLowerCase().includes(q))
+        .slice(0, 4)
+        .map(t => ({
+          type: 'task',
+          title: t.text,
+          desc: `Task #${t.id} · ${t.priority || 'Normal'} (${t.status})`,
+          icon: '⚡',
+          handler: () => {
+            navigateTo('tasks');
+            loadTasks();
+          }
+        }));
+
+      renderCommands([...matchingDefaults, ...matchingTasks, ...matchingNotes]);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      const items = list.querySelectorAll('.cmd-item');
+      if (!items.length) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedIndex = (selectedIndex + 1) % items.length;
+        updateSelection(items);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+        updateSelection(items);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (currentResults[selectedIndex]) {
+          closePalette();
+          currentResults[selectedIndex].handler();
+        }
+      }
+    });
+
+    function updateSelection(items) {
+      items.forEach((it, i) => it.classList.toggle('selected', i === selectedIndex));
+      if (items[selectedIndex]) items[selectedIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Integrations Hub
+  // --------------------------------------------------------------------------
+
+  function initIntegrationsHub() {
+    const origin = window.location.origin;
+    const webhookUrl = `${origin}/api/webhooks/inbound`;
+
+    const displayEl = $('#inboundWebhookUrlDisplay');
+    if (displayEl) displayEl.textContent = webhookUrl;
+
+    const copyCurlBtn = $('#copyWebhookCurlBtn');
+    if (copyCurlBtn) {
+      copyCurlBtn.onclick = () => {
+        const curlSnippet = `curl -X POST "${webhookUrl}" \\\n  -H "Content-Type: application/json" \\\n  -H "X-Webhook-Secret: default_secret" \\\n  -d '{"text": "Call investor at 3pm #urgent", "source": "ios_shortcut", "auto_process": true}'`;
+        navigator.clipboard.writeText(curlSnippet).then(() => {
+          showToast('Copied cURL snippet to clipboard!', 'success');
+        });
+      };
+    }
+
+    const testPingBtn = $('#testInboundWebhookBtn');
+    if (testPingBtn) {
+      testPingBtn.onclick = async () => {
+        setButtonLoading(testPingBtn, true);
+        try {
+          const res = await api('/api/webhooks/inbound', {
+            method: 'POST',
+            body: {
+              text: 'Review quarterly architecture roadmap with team tomorrow at 10am #urgent #tech',
+              source: 'shortcuts_simulator',
+              auto_process: true,
+            }
+          });
+          showToast(`Inbound ping verified! Created note #${res.item_id} with ${res.tasks_created} tasks extracted.`, 'success');
+          await loadNotes();
+          await loadTasks();
+          refreshDashboard();
+        } catch (err) {
+          showToast(`Inbound webhook error: ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(testPingBtn, false);
+        }
+      };
+    }
+
+    const slackInput = $('#slackWebhookInput');
+    const savePrefBtn = $('#saveWebhookPrefBtn');
+    if (slackInput) {
+      slackInput.value = localStorage.getItem('life_inbox_slack_webhook') || '';
+    }
+    if (savePrefBtn && slackInput) {
+      savePrefBtn.onclick = () => {
+        const val = slackInput.value.trim();
+        if (val) {
+          localStorage.setItem('life_inbox_slack_webhook', val);
+          showToast('Webhook URL saved in browser storage.', 'success');
+        } else {
+          localStorage.removeItem('life_inbox_slack_webhook');
+          showToast('Webhook URL cleared.', 'info');
+        }
+      };
+    }
+
+    const sendBriefingBtn = $('#sendBriefingWebhookBtn');
+    if (sendBriefingBtn && slackInput) {
+      sendBriefingBtn.onclick = async () => {
+        const val = slackInput.value.trim() || localStorage.getItem('life_inbox_slack_webhook');
+        if (!val) {
+          showToast('Please enter an incoming webhook URL first.', 'error');
+          slackInput.focus();
+          return;
+        }
+        setButtonLoading(sendBriefingBtn, true);
+        try {
+          const briefing = cachedBriefing || await api('/api/briefing/today');
+          await api('/api/integrations/dispatch', {
+            method: 'POST',
+            body: {
+              webhook_url: val,
+              target_type: 'slack',
+              text: `*${briefing.greeting}* - Daily Executive Standup Briefing\n${briefing.executive_summary}`
+            }
+          });
+          showToast('Daily briefing dispatched successfully!', 'success');
+        } catch (err) {
+          showToast(`Dispatch failed: ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(sendBriefingBtn, false);
+        }
+      };
+    }
+  }
+
   function init() {
     initTheme();
     initAuthUI();
     initNavigation();
     initNotes();
+    initVoiceRecorder();
     initAnalysis();
     initTasks();
+    initEisenhowerMatrix();
+    initBriefing();
+    initCommandPalette();
+    initIntegrationsHub();
     initAskInbox();
     initWeeklyDigest();
     initKeyboardShortcuts();

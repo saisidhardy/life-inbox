@@ -42,6 +42,10 @@
                     <span class="nav-icon">✅</span>
                     <span>Tasks</span>
                 </button>
+                <button class="nav-item" data-section="integrations">
+                    <span class="nav-icon">🔗</span>
+                    <span>Integrations</span>
+                </button>
             </nav>
             <div class="sidebar-footer">
                 <p><strong>Life Inbox</strong></p>
@@ -60,6 +64,11 @@
                     <span>Life Inbox</span>
                 </div>
                 <div class="top-bar-actions">
+                    <button id="cmdPaletteBtn" class="btn btn-sm btn-ghost" aria-label="Open command palette" title="Search & Actions (Ctrl+K)" style="padding:5px 12px;font-size:0.85rem;border:1px solid var(--border);border-radius:var(--radius-full);color:var(--text-secondary);display:inline-flex;align-items:center;gap:6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <span>Commands</span>
+                        <kbd style="font-size:0.7rem;padding:2px 5px;background:var(--bg-tertiary);border-radius:4px;border:1px solid var(--border);">⌘K</kbd>
+                    </button>
                     <button id="tokenConfigBtn" class="btn btn-sm btn-ghost" aria-label="Configure access token" title="Configure access token" style="padding:6px 10px;font-size:0.85rem;display:inline-flex;align-items:center;gap:4px;">
                         <span>🔑</span>
                         <span class="token-btn-label">Auth</span>
@@ -76,6 +85,43 @@
                 <section id="dashboard-section" class="section">
                     <div class="section-header">
                         <h2>Dashboard Overview</h2>
+                    </div>
+
+                    <!-- AI Executive Daily Morning Briefing Card -->
+                    <div id="executiveBriefingCard" class="executive-briefing-card">
+                        <div class="briefing-top">
+                            <div>
+                                <div class="briefing-greeting">
+                                    <span>⚡</span>
+                                    <span id="briefingGreeting">Good morning, Chief</span>
+                                </div>
+                                <div class="briefing-date" id="briefingDate">Loading today's executive focus...</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="briefing-health" id="briefingHealthBadge">
+                                    <span>🛡️</span>
+                                    <span id="briefingHealthScore">Inbox 95% Healthy</span>
+                                </div>
+                                <button type="button" id="refreshBriefingBtn" class="btn btn-sm btn-ghost" title="Refresh briefing" style="padding:4px 8px;">
+                                    🔄
+                                </button>
+                            </div>
+                        </div>
+                        <div class="briefing-summary" id="briefingSummaryText">
+                            Synthesizing today's highest leverage priorities...
+                        </div>
+                        <div id="briefingRecommendationsList" style="margin-bottom:14px;display:flex;flex-direction:column;gap:6px;"></div>
+                        <div class="briefing-actions">
+                            <button type="button" id="briefingSyncCalendarBtn" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);font-size:0.85rem;">
+                                📅 Add Focus to Calendar
+                            </button>
+                            <button type="button" id="briefingShareSlackBtn" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);font-size:0.85rem;">
+                                💬 Dispatch to Slack / Discord
+                            </button>
+                            <button type="button" id="briefingOpenMatrixBtn" class="btn btn-sm btn-primary" style="font-size:0.85rem;">
+                                🎯 Open Focus Matrix
+                            </button>
+                        </div>
                     </div>
 
                     <div class="dashboard-stats" style="grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));">
@@ -209,12 +255,29 @@
                             <button type="button" id="removeFileBtn" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:1.1rem;color:var(--text-muted);" title="Remove file">&times;</button>
                         </div>
 
+                        <!-- Live Voice Recording Bar -->
+                        <div id="voiceRecordingBar" style="display:none;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--danger-light);border:1px solid rgba(220,38,38,0.3);border-radius:var(--radius-md);margin-bottom:12px;">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span class="pulsing-record-dot" style="width:12px;height:12px;border-radius:50%;background:var(--danger);display:inline-block;"></span>
+                                <span style="font-weight:600;font-size:0.9rem;color:var(--danger);">Recording Voice Memo...</span>
+                                <span id="recordingTimer" style="font-family:monospace;font-size:0.9rem;font-weight:700;color:var(--danger);">00:00</span>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" id="cancelVoiceBtn" class="btn btn-sm btn-ghost" style="color:var(--danger);">Cancel</button>
+                                <button type="button" id="stopVoiceBtn" class="btn btn-sm btn-primary" style="background:var(--danger);border-color:var(--danger);color:#fff;">⏹️ Finish & Transcribe</button>
+                            </div>
+                        </div>
+
                         <textarea id="noteText" placeholder="Capture a thought, task, meeting note, or drop a file/image here... (Press Ctrl+Enter to save)"></textarea>
                         <div class="input-actions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <input type="file" id="fileUploadInput" style="display:none;" accept="image/*,.pdf,.txt,.md,.markdown,.json,.csv,.log,audio/*">
                             <button type="button" id="attachFileBtn" class="btn btn-sm btn-ghost" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.85rem;">
                                 <span>📎</span>
-                                <span>Attach File / Image</span>
+                                <span>Attach File</span>
+                            </button>
+                            <button type="button" id="recordVoiceBtn" class="btn btn-sm btn-ghost" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:0.85rem;color:var(--accent);">
+                                <span id="voiceMicIcon">🎙️</span>
+                                <span id="voiceBtnLabel">Record Voice</span>
                             </button>
                             <span id="noteStatus" class="status-msg" style="color:var(--text-muted);font-size:0.85rem;margin-right:auto;"></span>
                             <button id="addNoteBtn" class="btn btn-primary">
@@ -304,31 +367,251 @@
                         </div>
                     </div>
 
-                    <!-- Interactive Status Tabs -->
-                    <div class="task-tabs-container" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:12px;">
-                        <button type="button" class="btn btn-sm btn-primary task-tab-btn active" data-task-status="open" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
-                            <span>⏳ Open</span>
-                            <span id="taskCountOpen" class="badge" style="background:rgba(255,255,255,0.25);font-size:0.75rem;">0</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="completed" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
-                            <span>✅ Completed</span>
-                            <span id="taskCountCompleted" class="badge" style="background:var(--color-success, #10b981);color:#fff;font-size:0.75rem;">0</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="dismissed" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
-                            <span>✕ Dismissed</span>
-                            <span id="taskCountDismissed" class="badge" style="background:var(--text-muted);color:#fff;font-size:0.75rem;">0</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="all" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
-                            <span>📋 All</span>
-                            <span id="taskCountAll" class="badge" style="background:var(--bg-subtle, #e2e8f0);color:var(--text-secondary);font-size:0.75rem;">0</span>
+                    <!-- View Mode Toggle: List vs Eisenhower Matrix -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+                        <div style="display:inline-flex;padding:3px;background:var(--bg-tertiary);border-radius:var(--radius-sm);border:1px solid var(--border);">
+                            <button type="button" id="taskViewListBtn" class="btn btn-sm btn-primary" style="padding:4px 12px;font-size:0.82rem;border-radius:var(--radius-xs);">
+                                📋 List View
+                            </button>
+                            <button type="button" id="taskViewMatrixBtn" class="btn btn-sm btn-ghost" style="padding:4px 12px;font-size:0.82rem;border-radius:var(--radius-xs);">
+                                🎯 Eisenhower Matrix
+                            </button>
+                        </div>
+                        <button type="button" id="taskDispatchAllBtn" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);font-size:0.82rem;" title="Send open tasks to Slack or Discord">
+                            💬 Dispatch to Slack / Discord
                         </button>
                     </div>
 
-                    <div id="taskStatus" class="status-msg" style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);"></div>
-                    <div id="tasks"></div>
+                    <!-- List View Container -->
+                    <div id="tasksListView">
+                        <!-- Interactive Status Tabs -->
+                        <div class="task-tabs-container" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:12px;">
+                            <button type="button" class="btn btn-sm btn-primary task-tab-btn active" data-task-status="open" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                                <span>⏳ Open</span>
+                                <span id="taskCountOpen" class="badge" style="background:rgba(255,255,255,0.25);font-size:0.75rem;">0</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="completed" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                                <span>✅ Completed</span>
+                                <span id="taskCountCompleted" class="badge" style="background:var(--color-success, #10b981);color:#fff;font-size:0.75rem;">0</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="dismissed" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                                <span>✕ Dismissed</span>
+                                <span id="taskCountDismissed" class="badge" style="background:var(--text-muted);color:#fff;font-size:0.75rem;">0</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-ghost task-tab-btn" data-task-status="all" style="border-radius:20px;padding:6px 14px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px;">
+                                <span>📋 All</span>
+                                <span id="taskCountAll" class="badge" style="background:var(--bg-subtle, #e2e8f0);color:var(--text-secondary);font-size:0.75rem;">0</span>
+                            </button>
+                        </div>
+
+                        <div id="taskStatus" class="status-msg" style="margin-bottom:12px;font-size:0.85rem;color:var(--text-muted);"></div>
+                        <div id="tasks"></div>
+                    </div>
+
+                    <!-- Eisenhower Focus Matrix View Container -->
+                    <div id="tasksMatrixView" style="display:none;">
+                        <div class="matrix-grid">
+                            <div class="matrix-quadrant matrix-quadrant--q1">
+                                <div class="matrix-header">
+                                    <span class="matrix-title">🔥 1. Do First</span>
+                                    <span class="matrix-badge" style="background:#fee2e2;color:#991b1b;" id="countQ1">0</span>
+                                </div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;">Urgent & Important · Immediate action required</div>
+                                <div class="matrix-tasks" id="matrixQ1"></div>
+                            </div>
+                            <div class="matrix-quadrant matrix-quadrant--q2">
+                                <div class="matrix-header">
+                                    <span class="matrix-title">📅 2. Schedule</span>
+                                    <span class="matrix-badge" style="background:#dbeafe;color:#1e40af;" id="countQ2">0</span>
+                                </div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;">Important, Not Urgent · High-leverage execution</div>
+                                <div class="matrix-tasks" id="matrixQ2"></div>
+                            </div>
+                            <div class="matrix-quadrant matrix-quadrant--q3">
+                                <div class="matrix-header">
+                                    <span class="matrix-title">🤝 3. Delegate</span>
+                                    <span class="matrix-badge" style="background:#fef3c7;color:#92400e;" id="countQ3">0</span>
+                                </div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;">Urgent, Not Important · Quick errands or delegate</div>
+                                <div class="matrix-tasks" id="matrixQ3"></div>
+                            </div>
+                            <div class="matrix-quadrant matrix-quadrant--q4">
+                                <div class="matrix-header">
+                                    <span class="matrix-title">💡 4. Someday</span>
+                                    <span class="matrix-badge" style="background:#f3e8ff;color:#6b21a8;" id="countQ4">0</span>
+                                </div>
+                                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:10px;">Neither · Low priority backlog & ideas</div>
+                                <div class="matrix-tasks" id="matrixQ4"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Section: Integrations Hub -->
+                <section id="integrations-section" class="section hidden">
+                    <div class="section-header">
+                        <h2>🔗 Integrations & Command Hub</h2>
+                        <div class="section-actions">
+                            <span class="badge badge--mode">4 Connectors Active</span>
+                        </div>
+                    </div>
+
+                    <p style="font-size:0.92rem;color:var(--text-secondary);margin-bottom:20px;">
+                        Connect Life Inbox to your everyday work stack. Send capture items via iOS Shortcuts, dispatch briefings to Slack, or sync to Google Calendar.
+                    </p>
+
+                    <div class="integration-grid">
+                        <!-- Card 1: Apple Shortcuts & Inbound Webhooks -->
+                        <div class="integration-card">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <h3 style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+                                    <span>📱</span> Apple Shortcuts & Inbound API
+                                </h3>
+                                <span class="badge" style="background:var(--success-light);color:var(--success);">Active</span>
+                            </div>
+                            <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                Push notes from your iPhone, Mac, Raycast, Zapier, or Make directly into your inbox with automatic AI task extraction.
+                            </p>
+                            <div>
+                                <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Inbound Webhook Endpoint:</label>
+                                <div class="code-box" id="inboundWebhookUrlDisplay">/api/webhooks/inbound</div>
+                            </div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="copyWebhookCurlBtn" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);">
+                                    📋 Copy cURL Snippet
+                                </button>
+                                <button type="button" id="testInboundWebhookBtn" class="btn btn-sm btn-primary">
+                                    ⚡ Test Inbound Ping
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Slack & Discord Outbound Webhooks -->
+                        <div class="integration-card">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <h3 style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+                                    <span>💬</span> Slack & Discord Outbound
+                                </h3>
+                                <span class="badge" style="background:var(--accent-light);color:var(--accent);">Ready</span>
+                            </div>
+                            <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                Broadcast executive morning briefings and high-priority action items straight to a team Slack channel or Discord server.
+                            </p>
+                            <div>
+                                <label style="font-size:0.8rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Incoming Webhook URL:</label>
+                                <input type="url" id="slackWebhookInput" placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..." style="width:100%;padding:8px 12px;font-size:0.85rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-primary);color:var(--text-primary);">
+                            </div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                <button type="button" id="sendBriefingWebhookBtn" class="btn btn-sm btn-primary">
+                                    🚀 Dispatch Daily Briefing
+                                </button>
+                                <button type="button" id="saveWebhookPrefBtn" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);">
+                                    💾 Save Webhook URL
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Google Calendar & iCal -->
+                        <div class="integration-card">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <h3 style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+                                    <span>📅</span> Calendar & Schedule Sync
+                                </h3>
+                                <span class="badge" style="background:var(--success-light);color:var(--success);">Enabled</span>
+                            </div>
+                            <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                One-click direct export of any scheduled task or meeting note into Google Calendar or standard <code>.ics</code> for Apple Calendar & Outlook.
+                            </p>
+                            <div style="font-size:0.82rem;line-height:1.5;color:var(--text-muted);background:var(--bg-primary);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+                                Tip: Click <strong>"📅 Calendar"</strong> on any task card to open directly in Google Calendar or download the event.
+                            </div>
+                        </div>
+
+                        <!-- Card 4: GitHub & Linear Issue Bridge -->
+                        <div class="integration-card">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <h3 style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+                                    <span>🛠️</span> GitHub & Linear Bridge
+                                </h3>
+                                <span class="badge" style="background:var(--accent-light);color:var(--accent);">Integrated</span>
+                            </div>
+                            <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                Turn any technical note, architecture thought, or bug task into a pre-filled GitHub Issue draft or Linear issue in one click.
+                            </p>
+                            <div style="font-size:0.82rem;line-height:1.5;color:var(--text-muted);background:var(--bg-primary);padding:10px;border-radius:var(--radius-sm);border:1px solid var(--border);">
+                                Tip: Click <strong>"🔗 Issue"</strong> on any task to draft an issue with task title and details pre-populated.
+                            </div>
+                        </div>
+                    </div>
                 </section>
             </div>
         </main>
+    </div>
+
+    <!-- Command Palette (Ctrl+K / Cmd+K) Modal -->
+    <div id="cmdPaletteModal" class="cmd-palette-backdrop" style="display:none;">
+        <div class="cmd-palette-modal" onclick="event.stopPropagation()">
+            <div class="cmd-input-wrapper">
+                <span style="font-size:1.1rem;opacity:0.6;">🔍</span>
+                <input type="text" id="cmdPaletteInput" class="cmd-input" placeholder="Type a command or search notes & tasks... (Esc to close)" autocomplete="off">
+                <span class="cmd-kbd">ESC</span>
+            </div>
+            <div id="cmdResultsList" class="cmd-results-list">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="cmd-footer">
+                <span>Navigate <kbd>↑</kbd> <kbd>↓</kbd></span>
+                <span>Select <kbd>↵ Enter</kbd></span>
+                <span>Close <kbd>ESC</kbd></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task External Actions & Export Modal -->
+    <div id="taskExportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:520px;width:100%;box-shadow:var(--shadow-xl);background:var(--bg-secondary);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h3 id="taskExportTitle" style="font-size:1.1rem;display:flex;align-items:center;gap:8px;">
+                    <span>⚡</span> Integration Actions
+                </h3>
+                <button type="button" id="closeTaskExportBtn" class="btn btn-sm btn-ghost" style="font-size:1.2rem;padding:2px 8px;">&times;</button>
+            </div>
+            <p id="taskExportDesc" style="font-size:0.88rem;color:var(--text-secondary);margin-bottom:16px;"></p>
+            
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <div style="padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-primary);">
+                    <div style="font-weight:600;font-size:0.88rem;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                        <span>📅</span> Calendar Scheduling
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <a id="taskGoogleCalBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary" style="text-decoration:none;">
+                            Open in Google Calendar
+                        </a>
+                        <a id="taskIcsBtn" href="#" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);text-decoration:none;">
+                            Download .ics
+                        </a>
+                    </div>
+                </div>
+
+                <div style="padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-primary);">
+                    <div style="font-weight:600;font-size:0.88rem;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                        <span>🛠️</span> Issue Trackers
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <a id="taskGithubBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);text-decoration:none;">
+                            Create GitHub Issue
+                        </a>
+                        <a id="taskLinearBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);text-decoration:none;">
+                            Create Linear Issue
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                <button id="doneTaskExportBtn" class="btn btn-sm btn-ghost">Close</button>
+            </div>
+        </div>
     </div>
 
     <!-- Batch Import Modal -->
@@ -399,6 +682,10 @@
         <button class="nav-item" data-section="tasks">
             <span class="nav-icon">✅</span>
             <span>Tasks</span>
+        </button>
+        <button class="nav-item" data-section="integrations">
+            <span class="nav-icon">🔗</span>
+            <span>Integrations</span>
         </button>
     </nav>
 
