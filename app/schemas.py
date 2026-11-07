@@ -358,4 +358,26 @@ class ExternalIssueLinkResponse(BaseModel):
     linear_issue_url: str
 
 
+class DailyBriefing(BaseModel):
+    date: str
+    greeting: str
+    high_impact_tasks: List[Task] = Field(default_factory=list)
+    due_soon_tasks: List[Task] = Field(default_factory=list)
+    open_tasks_count: int = 0
+    completed_tasks_count: int = 0
+    stale_notes_count: int = 0
+    inbox_health_score: int = 100
+    ai_focus_summary: str
+    recommended_actions: List[str] = Field(default_factory=list)
+    latency_ms: float = 0.0
+
+
+class EisenhowerMatrix(BaseModel):
+    q1_do_first: List[Task] = Field(default_factory=list)
+    q2_schedule: List[Task] = Field(default_factory=list)
+    q3_delegate: List[Task] = Field(default_factory=list)
+    q4_eliminate: List[Task] = Field(default_factory=list)
+
+
+
 

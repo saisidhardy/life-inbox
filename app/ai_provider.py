@@ -92,6 +92,16 @@ class BaseAIProvider(ABC):
         """Structure a raw note into TLDR, key points, action items, and open questions."""
         pass
 
+    @abstractmethod
+    def generate_daily_briefing(
+        self,
+        open_tasks: List[dict],
+        due_soon: List[dict],
+        stale_count: int,
+    ) -> Dict[str, Any]:
+        """Generate a personalized daily executive briefing and focus recommendations."""
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Mock AI Provider (Deterministic, Offline, 0 Cost)
@@ -545,6 +555,50 @@ class MockAIProvider(BaseAIProvider):
             "open_questions": open_questions,
         }
 
+    def generate_daily_briefing(
+        self,
+        open_tasks: List[dict],
+        due_soon: List[dict],
+        stale_count: int,
+    ) -> Dict[str, Any]:
+        start_time = time.perf_counter()
+        high_pri = [t for t in open_tasks if t.get("priority") == "High"]
+        top_focus = (
+            high_pri[0]["text"]
+            if high_pri
+            else (open_tasks[0]["text"] if open_tasks else "All tasks clear!")
+        )
+
+        summary = (
+            f"You have {len(open_tasks)} active task(s), with {len(high_pri)} high-priority items. "
+            f"Key focus for today: '{top_focus}'."
+        )
+        recommendations = [
+            f"Close high-impact item: {top_focus}",
+            "Review urgent commitments and calendar schedule before noon",
+        ]
+        if stale_count > 0:
+            recommendations.append(f"Triage {stale_count} stale note(s) older than 7 days")
+
+        latency_ms = (time.perf_counter() - start_time) * 1000.0
+        prompt_tokens = 90
+        completion_tokens = 60
+        db.record_ai_metric(
+            operation="daily_briefing",
+            provider=self.provider_name,
+            model=self.model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            latency_ms=latency_ms,
+            estimated_cost_usd=0.0,
+            status="success",
+        )
+        return {
+            "summary": summary,
+            "recommendations": recommendations,
+        }
+
 
 # ---------------------------------------------------------------------------
 # OpenAI Provider (Real LLM, Retries, Cost Calculation)
@@ -827,6 +881,47 @@ class OpenAIProvider(BaseAIProvider):
             )
             return res.parsed
         return self._fallback.enhance_note(note_text)
+
+    def generate_daily_briefing(
+        self,
+        open_tasks: List[dict],
+        due_soon: List[dict],
+        stale_count: int,
+    ) -> Dict[str, Any]:
+        task_lines = "\n".join(
+            f"- [{t.get('priority')}] {t.get('text')} (due: {t.get('timing_text')})"
+            for t in open_tasks[:8]
+        )
+        prompt = (
+            f"You are an executive chief of staff preparing a concise daily briefing.\n"
+            f"Open tasks:\n{task_lines or 'None'}\n"
+            f"Stale notes older than 7 days: {stale_count}\n\n"
+            f"Return JSON with:\n"
+            f"- \"summary\": 2-sentence executive summary of today's focus\n"
+            f"- \"recommendations\": list of 2-3 concrete actions to execute today"
+        )
+        messages = [
+            {"role": "system", "content": "You are an executive assistant. Output strictly valid JSON."},
+            {"role": "user", "content": prompt},
+        ]
+        res = self._call_chat_completion(messages, response_format_json=True)
+        if res.status == "success" and res.parsed and "summary" in res.parsed:
+            db.record_ai_metric(
+                operation="daily_briefing",
+                provider=self.provider_name,
+                model=self.model_name,
+                prompt_tokens=res.prompt_tokens,
+                completion_tokens=res.completion_tokens,
+                total_tokens=res.total_tokens,
+                latency_ms=res.latency_ms,
+                estimated_cost_usd=res.estimated_cost_usd,
+                status="success",
+            )
+            return {
+                "summary": res.parsed.get("summary", ""),
+                "recommendations": res.parsed.get("recommendations", []),
+            }
+        return self._fallback.generate_daily_briefing(open_tasks, due_soon, stale_count)
 
 
 def get_ai_provider() -> BaseAIProvider:

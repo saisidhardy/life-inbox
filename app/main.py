@@ -54,8 +54,10 @@ from app.schemas import (
     AskInboxRequest,
     AskInboxResponse,
     CalendarExportResponse,
+    DailyBriefing,
     DispatchWebhookRequest,
     DispatchWebhookResponse,
+    EisenhowerMatrix,
     ExternalIssueLinkResponse,
     FileUploadResponse,
     InboundWebhookPayload,
@@ -561,6 +563,110 @@ def get_weekly_digest():
         raise HTTPException(
             status_code=500,
             detail="Unable to generate weekly digest. Please try again.",
+        ) from exc
+
+
+@app.get("/api/briefing/today", response_model=DailyBriefing)
+def get_daily_briefing():
+    """Synthesize today's executive morning standup briefing and focus recommendations."""
+    try:
+        start_time = time.perf_counter()
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%A, %b %d, %Y")
+
+        hour = now.hour
+        if hour < 12:
+            greeting = "Good morning"
+        elif hour < 17:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good evening"
+
+        open_tasks = list_tasks_from_db("open")
+        completed_tasks = list_tasks_from_db("completed")
+        stale_items = get_stale_items(days=7)
+
+        # High impact = High priority open tasks
+        high_impact = [Task(**t) for t in open_tasks if t.get("priority") == "High"]
+
+        # Due soon = timing has today, tomorrow, or soon
+        due_soon = []
+        urgent_markers = ["today", "tomorrow", "tonight", "urgent", "friday", "monday", "asap"]
+        for t in open_tasks:
+            timing = (t.get("timing_text") or "").lower()
+            if any(w in timing for w in urgent_markers):
+                due_soon.append(Task(**t))
+
+        # Health score: 0 to 100
+        total_tasks = len(open_tasks) + len(completed_tasks)
+        completion_ratio = len(completed_tasks) / (total_tasks or 1)
+        stale_penalty = min(30, len(stale_items) * 5)
+        health_score = int(max(20, min(100, (completion_ratio * 40) + 60 - stale_penalty)))
+
+        provider = get_ai_provider()
+        briefing_ai = provider.generate_daily_briefing(
+            open_tasks, [t.model_dump() for t in due_soon], len(stale_items)
+        )
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        return DailyBriefing(
+            date=date_str,
+            greeting=greeting,
+            high_impact_tasks=high_impact[:4],
+            due_soon_tasks=due_soon[:4],
+            open_tasks_count=len(open_tasks),
+            completed_tasks_count=len(completed_tasks),
+            stale_notes_count=len(stale_items),
+            inbox_health_score=health_score,
+            ai_focus_summary=briefing_ai.get("summary", ""),
+            recommended_actions=briefing_ai.get("recommendations", []),
+            latency_ms=latency_ms,
+        )
+    except Exception as exc:
+        logger.exception("Failed to generate daily briefing")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to generate daily briefing. Please try again.",
+        ) from exc
+
+
+@app.get("/api/tasks/matrix", response_model=EisenhowerMatrix)
+def get_eisenhower_matrix():
+    """Triage all open tasks into the 4 Eisenhower decision matrix quadrants."""
+    try:
+        open_tasks = list_tasks_from_db("open")
+        q1_do_first = []
+        q2_schedule = []
+        q3_delegate = []
+        q4_eliminate = []
+
+        urgent_markers = ["today", "tomorrow", "urgent", "asap", "tonight", "immediately"]
+
+        for t in open_tasks:
+            pri = t.get("priority", "Medium")
+            timing = (t.get("timing_text") or "").lower()
+            is_urgent = any(m in timing for m in urgent_markers)
+            task_obj = Task(**t)
+
+            if pri == "High" and (is_urgent or timing):
+                q1_do_first.append(task_obj)
+            elif pri == "High" or (pri == "Medium" and not is_urgent):
+                q2_schedule.append(task_obj)
+            elif pri == "Medium" and is_urgent:
+                q3_delegate.append(task_obj)
+            else:
+                q4_eliminate.append(task_obj)
+
+        return EisenhowerMatrix(
+            q1_do_first=q1_do_first,
+            q2_schedule=q2_schedule,
+            q3_delegate=q3_delegate,
+            q4_eliminate=q4_eliminate,
+        )
+    except Exception as exc:
+        logger.exception("Failed to load Eisenhower matrix")
+        raise HTTPException(
+            status_code=500, detail="Unable to load Eisenhower matrix."
         ) from exc
 
 

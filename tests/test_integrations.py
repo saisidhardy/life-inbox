@@ -178,3 +178,48 @@ def test_external_issue_links(client):
     assert "github.com" in data["github_issue_url"]
     assert "issues/new" in data["github_issue_url"]
     assert "linear.app/new" in data["linear_issue_url"]
+
+
+def test_daily_briefing_endpoint(client):
+    """Daily briefing synthesizes today's focus, health score, and top tasks."""
+    client.post(
+        "/api/webhooks/inbound",
+        json={"text": "Need to review customer renewal contract today #urgent", "source": "test"},
+    )
+    res = client.get("/api/briefing/today")
+    assert res.status_code == 200
+    data = res.json()
+    assert "date" in data
+    assert any(g in data["greeting"] for g in ["Good morning", "Good afternoon", "Good evening"])
+    assert data["open_tasks_count"] >= 1
+    assert 0 <= data["inbox_health_score"] <= 100
+    assert len(data["ai_focus_summary"]) > 0
+    assert len(data["recommended_actions"]) >= 1
+
+
+def test_eisenhower_matrix_endpoint(client):
+    """Eisenhower matrix partitions open tasks into 4 quadrants."""
+    client.post(
+        "/api/webhooks/inbound",
+        json={"text": "Need to rotate production API keys immediately", "source": "test"},
+    )
+    client.post(
+        "/api/webhooks/inbound",
+        json={"text": "Need to buy groceries by tomorrow", "source": "test"},
+    )
+
+    res = client.get("/api/tasks/matrix")
+    assert res.status_code == 200
+    data = res.json()
+    assert "q1_do_first" in data
+    assert "q2_schedule" in data
+    assert "q3_delegate" in data
+    assert "q4_eliminate" in data
+    total_in_quadrants = (
+        len(data["q1_do_first"])
+        + len(data["q2_schedule"])
+        + len(data["q3_delegate"])
+        + len(data["q4_eliminate"])
+    )
+    assert total_in_quadrants >= 2
+
