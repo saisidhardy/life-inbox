@@ -556,6 +556,33 @@ def get_task_by_id(task_id: int) -> Optional[dict]:
         return _task_to_dict(session, task)
 
 
+def update_task_in_db(
+    task_id: int,
+    text: Optional[str] = None,
+    priority: Optional[str] = None,
+    timing_text: Optional[str] = None,
+    status: Optional[str] = None,
+) -> Optional[dict]:
+    with SessionLocal() as session:
+        task = session.get(TaskRecord, task_id)
+        if task is None:
+            return None
+        if text is not None and text.strip():
+            task.text = text.strip()
+            norm = " ".join(task.text.lower().split())
+            task.dedup_key = hashlib.sha256(norm.encode("utf-8")).hexdigest()
+        if priority is not None and priority in {"High", "Medium", "Low"}:
+            task.priority = priority
+        if timing_text is not None:
+            task.timing_text = timing_text.strip() if timing_text.strip() else None
+        if status is not None and status in TASK_STATUSES:
+            task.status = status
+        task.updated_at = datetime.now(timezone.utc).isoformat()
+        session.commit()
+        return _task_to_dict(session, task)
+
+
+
 def add_custom_task_to_db(
     text: str,
     priority: str = "Medium",

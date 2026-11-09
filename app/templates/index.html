@@ -69,6 +69,9 @@
                         <span>Commands</span>
                         <kbd style="font-size:0.7rem;padding:2px 5px;background:var(--bg-tertiary);border-radius:4px;border:1px solid var(--border);">⌘K</kbd>
                     </button>
+                    <button id="shortcutsHelpBtn" class="btn btn-sm btn-ghost" aria-label="Keyboard shortcuts (?)" title="Keyboard shortcuts (?)" style="padding:5px 9px;font-size:0.85rem;border:1px solid var(--border);border-radius:var(--radius-full);color:var(--text-secondary);">
+                        <kbd style="font-size:0.75rem;font-family:monospace;font-weight:700;">?</kbd>
+                    </button>
                     <button id="tokenConfigBtn" class="btn btn-sm btn-ghost" aria-label="Configure access token" title="Configure access token" style="padding:6px 10px;font-size:0.85rem;display:inline-flex;align-items:center;gap:4px;">
                         <span>🔑</span>
                         <span class="token-btn-label">Auth</span>
@@ -268,6 +271,15 @@
                             </div>
                         </div>
 
+                        <!-- Quick Note Templates -->
+                        <div class="quick-template-chips" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+                            <span style="font-size:0.75rem;font-weight:600;color:var(--text-muted);margin-right:2px;">Templates:</span>
+                            <button type="button" class="btn btn-xs btn-ghost template-chip" data-template="meeting" style="font-size:0.75rem;padding:3px 8px;border:1px solid var(--border);border-radius:var(--radius-full);">📋 Meeting</button>
+                            <button type="button" class="btn btn-xs btn-ghost template-chip" data-template="bug" style="font-size:0.75rem;padding:3px 8px;border:1px solid var(--border);border-radius:var(--radius-full);">🐛 Bug Fix</button>
+                            <button type="button" class="btn btn-xs btn-ghost template-chip" data-template="adr" style="font-size:0.75rem;padding:3px 8px;border:1px solid var(--border);border-radius:var(--radius-full);">📐 Architecture</button>
+                            <button type="button" class="btn btn-xs btn-ghost template-chip" data-template="idea" style="font-size:0.75rem;padding:3px 8px;border:1px solid var(--border);border-radius:var(--radius-full);">💡 Idea Dump</button>
+                        </div>
+
                         <textarea id="noteText" placeholder="Capture a thought, task, meeting note, or drop a file/image here... (Press Ctrl+Enter to save)"></textarea>
                         <div class="input-actions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <input type="file" id="fileUploadInput" style="display:none;" accept="image/*,.pdf,.txt,.md,.markdown,.json,.csv,.log,audio/*">
@@ -461,6 +473,28 @@
                     </p>
 
                     <div class="integration-grid">
+                        <!-- Card 0: Live Integrations Diagnostics Suite -->
+                        <div class="integration-card" style="grid-column: 1 / -1; background: var(--bg-secondary); border: 1px solid var(--accent); box-shadow: var(--shadow-sm);">
+                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                                <div>
+                                    <h3 style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+                                        <span>🩺</span> Live Integrations Diagnostics & Health Monitor
+                                    </h3>
+                                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-top:2px;">
+                                        Verify connectivity, latency, and status across all external connectors and internal services.
+                                    </p>
+                                </div>
+                                <button type="button" id="runDiagnosticsBtn" class="btn btn-sm btn-primary" style="display:inline-flex;align-items:center;gap:6px;">
+                                    <span>⚡</span> Run Diagnostics Self-Test
+                                </button>
+                            </div>
+                            <div id="diagnosticsResultsContainer" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:10px;margin-top:12px;">
+                                <div style="font-size:0.82rem;color:var(--text-muted);font-style:italic;padding:8px 0;">
+                                    Click "Run Diagnostics Self-Test" to inspect all connectors in real-time.
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Card 1: Apple Shortcuts & Inbound Webhooks -->
                         <div class="integration-card">
                             <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -542,6 +576,27 @@
                                 Tip: Click <strong>"🔗 Issue"</strong> on any task to draft an issue with task title and details pre-populated.
                             </div>
                         </div>
+
+                        <!-- Card 5: Workspace Backup & Disaster Recovery -->
+                        <div class="integration-card" style="grid-column: 1 / -1;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <h3 style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+                                    <span>💾</span> Workspace Full Backup & Restore
+                                </h3>
+                                <span class="badge" style="background:var(--success-light);color:var(--success);">Available</span>
+                            </div>
+                            <p style="font-size:0.85rem;color:var(--text-secondary);">
+                                Export your entire inbox, extracted tasks, and analysis history into a standard JSON backup or human-readable Markdown digest.
+                            </p>
+                            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                                <a href="/api/backup/export?format=json" download="life_inbox_backup.json" class="btn btn-sm btn-primary" style="text-decoration:none;">
+                                    📦 Export JSON Backup
+                                </a>
+                                <a href="/api/backup/export?format=markdown" download="life_inbox_backup.md" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);text-decoration:none;">
+                                    📄 Export Markdown Digest
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -606,6 +661,25 @@
                         </a>
                     </div>
                 </div>
+
+                <!-- Inline Task Details Editor -->
+                <div style="padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-primary);">
+                    <div style="font-weight:600;font-size:0.88rem;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                        <span>✏️</span> Edit Task Details
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <input type="text" id="editTaskTextInput" style="width:100%;padding:6px 10px;font-size:0.85rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);" placeholder="Task title...">
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <select id="editTaskPrioritySelect" style="padding:5px 8px;font-size:0.82rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);">
+                                <option value="High">High Priority</option>
+                                <option value="Medium">Medium Priority</option>
+                                <option value="Low">Low Priority</option>
+                            </select>
+                            <input type="text" id="editTaskTimingInput" placeholder="Due date / timing text..." style="flex:1;padding:5px 8px;font-size:0.82rem;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);">
+                            <button type="button" id="saveTaskEditBtn" class="btn btn-sm btn-primary">Save</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div style="display:flex;justify-content:flex-end;margin-top:16px;">
@@ -661,6 +735,55 @@
             <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding-top:12px;">
                 <button id="cancelBreakdownBtn" class="btn btn-sm btn-ghost">Cancel</button>
                 <button id="applyBreakdownBtn" class="btn btn-sm btn-primary">⚡ Add All to Inbox Tasks</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Help Modal (?) -->
+    <div id="shortcutsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10001;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);">
+        <div class="card" style="max-width:540px;width:100%;box-shadow:var(--shadow-xl);background:var(--bg-secondary);" onclick="event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <h3 style="font-size:1.15rem;display:flex;align-items:center;gap:8px;">
+                    <span>⌨️</span> Keyboard Shortcuts
+                </h3>
+                <button type="button" id="closeShortcutsBtn" class="btn btn-sm btn-ghost" style="font-size:1.2rem;padding:2px 8px;">&times;</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.86rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Command Palette</span>
+                    <kbd>⌘K / Ctrl+K</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Help Cheatsheet</span>
+                    <kbd>?</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Quick Capture Note</span>
+                    <kbd>c</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Submit Note</span>
+                    <kbd>Ctrl+Enter</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Go to Dashboard</span>
+                    <kbd>g d</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Go to Notes</span>
+                    <kbd>g n</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Go to Tasks</span>
+                    <kbd>g t</kbd>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);">
+                    <span>Go to Integrations</span>
+                    <kbd>g i</kbd>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                <button id="doneShortcutsBtn" class="btn btn-sm btn-primary">Got It</button>
             </div>
         </div>
     </div>

@@ -379,5 +379,43 @@ class EisenhowerMatrix(BaseModel):
     q4_eliminate: List[Task] = Field(default_factory=list)
 
 
+class TaskUpdate(BaseModel):
+    text: Optional[str] = Field(None, min_length=1, max_length=1000)
+    priority: Optional[Priority] = None
+    timing_text: Optional[str] = Field(None, max_length=200)
+    status: Optional[Literal["open", "completed", "dismissed"]] = None
+
+
+class ConnectorDiagnostic(BaseModel):
+    name: str
+    status: Literal["operational", "degraded", "offline"]
+    latency_ms: float
+    endpoint: str
+    details: str
+
+
+class IntegrationsDiagnosticsResponse(BaseModel):
+    status: Literal["healthy", "degraded", "error"]
+    timestamp: str
+    connectors: List[ConnectorDiagnostic]
+
+
+class WorkspaceBackupExport(BaseModel):
+    version: str = "1.0"
+    exported_at: str
+    total_items: int
+    total_tasks: int
+    items: List[dict]
+    tasks: List[dict]
+
+
+class WorkspaceBackupImportResponse(BaseModel):
+    status: str = "restored"
+    items_imported: int
+    tasks_imported: int
+    message: str
+
+
+
 
 

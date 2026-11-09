@@ -223,3 +223,106 @@ def test_eisenhower_matrix_endpoint(client):
     )
     assert total_in_quadrants >= 2
 
+
+def test_task_update_patch_endpoint(client):
+    """PATCH /api/tasks/{task_id} allows editing title, priority, and timing inline."""
+    client.post(
+        "/api/webhooks/inbound",
+        json={"text": "Need to update initial payment gateway handler #todo", "source": "test"},
+    )
+    tasks = client.get("/api/tasks?status=open").json()
+    assert len(tasks) >= 1
+    task_id = tasks[0]["id"]
+
+    # Patch text, priority, and timing
+    patch_payload = {
+        "text": "Refactored payment gateway handler",
+        "priority": "High",
+        "timing_text": "by Thursday 5pm",
+    }
+    patch_res = client.patch(f"/api/tasks/{task_id}", json=patch_payload)
+    assert patch_res.status_code == 200
+    updated = patch_res.json()
+    assert updated["text"] == "Refactored payment gateway handler"
+    assert updated["priority"] == "High"
+    assert updated["timing_text"] == "by Thursday 5pm"
+
+    # Verify task retains updated fields on GET
+    refetched = client.get("/api/tasks?status=all").json()
+    matching = next(t for t in refetched if t["id"] == task_id)
+    assert matching["text"] == "Refactored payment gateway handler"
+    assert matching["priority"] == "High"
+
+
+def test_integrations_diagnostics_endpoint(client):
+    """GET /api/integrations/diagnostics verifies health of all connectors."""
+    res = client.get("/api/integrations/diagnostics")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "healthy"
+    assert "timestamp" in data
+    assert len(data["connectors"]) >= 6
+
+    names = [c["name"] for c in data["connectors"]]
+    assert any("Shortcuts" in n for n in names)
+    assert any("Calendar" in n for n in names)
+    assert any("Slack" in n or "Discord" in n for n in names)
+    assert any("GitHub" in n or "Linear" in n for n in names)
+    assert any("Database" in n for n in names)
+
+    for conn in data["connectors"]:
+        assert conn["status"] == "operational"
+        assert conn["latency_ms"] >= 0
+
+
+def test_workspace_export_json_and_markdown(client):
+    """Workspace export returns full workspace in JSON and Markdown formats."""
+    client.post(
+        "/api/webhooks/inbound",
+        json={"text": "Quarterly financial review note #finance", "source": "test"},
+    )
+
+    # Export JSON
+    res_json = client.get("/api/backup/export?format=json")
+    assert res_json.status_code == 200
+    json_data = res_json.json()
+    assert json_data["version"] == "1.0"
+    assert json_data["total_items"] >= 1
+    assert len(json_data["items"]) >= 1
+
+    # Export Markdown
+    res_md = client.get("/api/backup/export?format=markdown")
+    assert res_md.status_code == 200
+    assert "text/markdown" in res_md.headers["content-type"]
+    assert "# Life Inbox — Workspace Export" in res_md.text
+    assert "## 📋 Tasks" in res_md.text
+    assert "## 📝 Notes & Items" in res_md.text
+
+
+def test_workspace_import_restore(client):
+    """Workspace import restores notes and tasks atomically."""
+    backup_payload = {
+        "items": [
+            {"raw_text": "Restored architecture design note #tech"},
+            {"raw_text": "Restored hiring goals note #hr"},
+        ],
+        "tasks": [
+            {"text": "Deploy microservice v2", "priority": "High", "timing_text": "tomorrow"},
+            {"text": "Interview backend engineer", "priority": "Medium", "timing_text": "Friday"},
+        ],
+    }
+
+    res = client.post("/api/backup/import", json=backup_payload)
+    assert res.status_code == 200
+    import_data = res.json()
+    assert import_data["status"] == "restored"
+    assert import_data["items_imported"] == 2
+    assert import_data["tasks_imported"] == 2
+
+    # Check imported tasks exist in tasks endpoint
+    tasks = client.get("/api/tasks?status=all").json()
+    task_texts = [t["text"] for t in tasks]
+    assert "Deploy microservice v2" in task_texts
+    assert "Interview backend engineer" in task_texts
+
+

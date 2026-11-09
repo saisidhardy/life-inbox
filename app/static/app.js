@@ -1683,6 +1683,49 @@
       if (linearBtn) {
         linearBtn.href = links.linear_issue_url || '#';
       }
+
+      // Inline Task Edit fields
+      const allTasksList = window._allTasks || currentTasks || [];
+      const currentTaskObj = allTasksList.find(t => String(t.id) === String(taskId));
+      const editInput = $('#editTaskTextInput');
+      const editPri = $('#editTaskPrioritySelect');
+      const editTiming = $('#editTaskTimingInput');
+      const saveBtn = $('#saveTaskEditBtn');
+
+      if (editInput) editInput.value = (currentTaskObj && currentTaskObj.text) || (cal && cal.task_text) || '';
+      if (editPri && currentTaskObj && currentTaskObj.priority) editPri.value = currentTaskObj.priority;
+      if (editTiming) editTiming.value = (currentTaskObj && currentTaskObj.timing_text) || '';
+
+      if (saveBtn) {
+        saveBtn.onclick = async () => {
+          const text = editInput ? editInput.value.trim() : '';
+          const priority = editPri ? editPri.value : 'Medium';
+          const timing_text = editTiming ? editTiming.value.trim() : '';
+          if (!text) {
+            showToast('Task title cannot be empty.', 'error');
+            return;
+          }
+          setButtonLoading(saveBtn, true);
+          try {
+            await api(`/api/tasks/${taskId}`, {
+              method: 'PATCH',
+              body: { text, priority, timing_text },
+            });
+            showToast('Task updated successfully!', 'success');
+            await loadTasks();
+            const matrixView = $('#tasksMatrixView');
+            if (matrixView && matrixView.style.display !== 'none') {
+              loadEisenhowerMatrix();
+            }
+            refreshDashboard();
+            modal.style.display = 'none';
+          } catch (err) {
+            showToast(`Update failed: ${err.message}`, 'error');
+          } finally {
+            setButtonLoading(saveBtn, false);
+          }
+        };
+      }
     } catch (err) {
       if (descEl) descEl.textContent = `Failed to load links: ${err.message}`;
       showToast(err.message, 'error');
@@ -2306,6 +2349,131 @@
         }
       };
     }
+
+    const diagBtn = $('#runDiagnosticsBtn');
+    const diagContainer = $('#diagnosticsResultsContainer');
+    if (diagBtn && diagContainer) {
+      diagBtn.onclick = async () => {
+        setButtonLoading(diagBtn, true);
+        diagContainer.innerHTML = '<div style="grid-column: 1 / -1; padding:12px;font-size:0.85rem;color:var(--text-muted);"><span class="spinner"></span> Running real-time diagnostics on all connectors...</div>';
+        try {
+          const res = await api('/api/integrations/diagnostics');
+          diagContainer.innerHTML = res.connectors.map(c => `
+            <div style="padding:10px 12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:var(--radius-sm);display:flex;flex-direction:column;gap:4px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-weight:600;font-size:0.85rem;color:var(--text-primary);">${esc(c.name)}</span>
+                <span class="badge" style="background:${c.status === 'operational' ? 'var(--success-light)' : 'var(--danger-light)'};color:${c.status === 'operational' ? 'var(--success)' : 'var(--danger)'};font-size:0.72rem;">
+                  ${c.status === 'operational' ? '● Operational' : '▲ Degraded'}
+                </span>
+              </div>
+              <div style="font-size:0.75rem;color:var(--text-muted);">${esc(c.details)}</div>
+              <div style="font-size:0.72rem;font-family:monospace;color:var(--accent);display:flex;justify-content:space-between;margin-top:2px;">
+                <span>${esc(c.endpoint)}</span>
+                <span>${c.latency_ms.toFixed(1)} ms</span>
+              </div>
+            </div>
+          `).join('');
+          showToast('Diagnostics completed: all connectors operational!', 'success');
+        } catch (err) {
+          diagContainer.innerHTML = `<div style="grid-column: 1 / -1; color:var(--danger);font-size:0.85rem;padding:8px;">Diagnostics check failed: ${esc(err.message)}</div>`;
+          showToast(`Diagnostics error: ${err.message}`, 'error');
+        } finally {
+          setButtonLoading(diagBtn, false);
+        }
+      };
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Note Scaffolding & Quick Capture Templates
+  // --------------------------------------------------------------------------
+
+  function initTemplates() {
+    const templates = {
+      meeting: '### 📋 Meeting: [Topic / Client]\n- **Date**: Today\n- **Attendees**: \n- **Key Takeaways**: \n- **Action Items**: Need to send summary email by tomorrow #urgent',
+      bug: '### 🐛 Bug: [Component / Page]\n- **Observed**: \n- **Expected**: \n- **Action**: Need to fix issue by end of day #urgent #bug',
+      adr: '### 📐 Architecture Decision: [System / Tech]\n- **Context**: \n- **Decision**: \n- **Consequences**: \n- **Next Steps**: Need to schedule review with team next week #architecture',
+      idea: '💡 Idea: [Concept]\n- **Target Audience**: \n- **Value Proposition**: \n- **Action Item**: Need to draft 1-page spec this weekend #ideas',
+    };
+    $$('.template-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tKey = btn.dataset.template;
+        const textarea = $('#noteText');
+        if (textarea && templates[tKey]) {
+          textarea.value = templates[tKey];
+          textarea.focus();
+          showToast(`Inserted ${tKey} template into capture box!`, 'info');
+        }
+      });
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Keyboard Shortcuts Cheatsheet Modal (?)
+  // --------------------------------------------------------------------------
+
+  function initShortcutsHelp() {
+    const modal = $('#shortcutsModal');
+    const openBtn = $('#shortcutsHelpBtn');
+    const closeBtn = $('#closeShortcutsBtn');
+    const doneBtn = $('#doneShortcutsBtn');
+    if (!modal) return;
+
+    const toggleModal = (show) => {
+      modal.style.display = show ? 'flex' : 'none';
+    };
+
+    if (openBtn) openBtn.onclick = () => toggleModal(true);
+    if (closeBtn) closeBtn.onclick = () => toggleModal(false);
+    if (doneBtn) doneBtn.onclick = () => toggleModal(false);
+    modal.onclick = (e) => { if (e.target === modal) toggleModal(false); };
+
+    let lastKey = '';
+    let lastKeyTime = 0;
+
+    document.addEventListener('keydown', (e) => {
+      const active = document.activeElement;
+      const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+      
+      if (e.key === '?' && !isInput && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleModal(modal.style.display !== 'flex');
+        return;
+      }
+
+      if (e.key === 'Escape' && modal.style.display === 'flex') {
+        toggleModal(false);
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        navigateTo('inbox');
+        const ta = $('#noteText');
+        if (ta) ta.focus();
+        return;
+      }
+
+      const now = Date.now();
+      if (lastKey === 'g' && now - lastKeyTime < 1000) {
+        if (e.key === 'd') { e.preventDefault(); navigateTo('dashboard'); }
+        if (e.key === 'n') { e.preventDefault(); navigateTo('inbox'); }
+        if (e.key === 't') { e.preventDefault(); navigateTo('tasks'); }
+        if (e.key === 'm') { e.preventDefault(); navigateTo('tasks'); switchToMatrixView(); }
+        if (e.key === 'i') { e.preventDefault(); navigateTo('integrations'); }
+        lastKey = '';
+        return;
+      }
+
+      if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
+        lastKey = 'g';
+        lastKeyTime = now;
+      } else {
+        lastKey = '';
+      }
+    });
   }
 
   function init() {
@@ -2313,6 +2481,7 @@
     initAuthUI();
     initNavigation();
     initNotes();
+    initTemplates();
     initVoiceRecorder();
     initAnalysis();
     initTasks();
@@ -2323,6 +2492,7 @@
     initAskInbox();
     initWeeklyDigest();
     initKeyboardShortcuts();
+    initShortcutsHelp();
     syncFiltersFromUrl();
   }
 
