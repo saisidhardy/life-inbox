@@ -22,7 +22,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "life_inbox.db"
+if os.getenv("DATA_DIR"):
+    DEFAULT_DB_PATH = Path(os.environ["DATA_DIR"]) / "life_inbox.db"
+    DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+else:
+    DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "life_inbox.db"
+
 DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_DB_PATH}"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
 
